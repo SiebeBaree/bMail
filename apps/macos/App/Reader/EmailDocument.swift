@@ -22,7 +22,10 @@ enum EmailDocument {
             <meta charset="utf-8">
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src * data: cid:; style-src 'unsafe-inline' *; font-src * data: mail-asset:; media-src *">
             <meta name="color-scheme" content="\(designed || !dark ? "light" : "dark")">
-            <style>\(designed ? designedStyle : plainStyle(dark: dark))</style>
+            <style>
+            /* The web view is as tall as its content and the thread scrolls around it, so it never shows bars of its own. */
+            ::-webkit-scrollbar { display: none; }
+            \(designed ? designedStyle : plainStyle(dark: dark))</style>
             </head>
             <body>\(body)</body>
             </html>

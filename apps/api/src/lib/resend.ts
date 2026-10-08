@@ -67,22 +67,30 @@ export type ResendGateway = {
 export function createResendGateway(apiKey: string, webhookSecret: string): ResendGateway {
     const resend = new Resend(apiKey);
 
+    async function getDomain(id: string): Promise<ResendDomain> {
+        const domain = await unwrap(resend.domains.get(id), "look up the domain");
+        return { id: domain.id, status: domainStatus(domain.status), records: dnsRecords(domain.records) };
+    }
+
     return {
         async createDomain(name) {
-            const domain = await unwrap(
-                resend.domains.create({
-                    name,
-                    region: REGION,
-                    capabilities: { sending: "enabled", receiving: "enabled" },
-                }),
-                `add ${name}`,
+            const capabilities = { sending: "enabled", receiving: "enabled" } as const;
+            const { data: created, error } = await resend.domains.create({ name, region: REGION, capabilities });
+            if (created) {
+                return { id: created.id, status: domainStatus(created.status), records: dnsRecords(created.records) };
+            }
+            // A domain already in this Resend account (added by hand, or by an earlier try) is adopted, not refused.
+            // Resend only says "registered already", which also covers a domain owned by another Resend account.
+            const existing = (await unwrap(resend.domains.list(), "list domains")).data.find(
+                (domain) => domain.name === name,
             );
-            return { id: domain.id, status: domainStatus(domain.status), records: dnsRecords(domain.records) };
+            if (!existing) {
+                throw new UpstreamError(`Resend couldn't add ${name}: ${error?.message ?? "empty response"}.`);
+            }
+            await unwrap(resend.domains.update({ id: existing.id, capabilities }), `turn on receiving for ${name}`);
+            return getDomain(existing.id);
         },
-        async getDomain(id) {
-            const domain = await unwrap(resend.domains.get(id), "look up the domain");
-            return { id: domain.id, status: domainStatus(domain.status), records: dnsRecords(domain.records) };
-        },
+        getDomain,
         async verifyDomain(id) {
             await unwrap(resend.domains.verify(id), "start verification");
         },
