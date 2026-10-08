@@ -7,6 +7,7 @@ import { createLogger } from "@repo/logger";
 
 import { buildApp } from "./app";
 import { createAuth } from "./auth";
+import { UpstreamError } from "./lib/errors";
 import { createResendGateway, type ResendGateway } from "./lib/resend";
 import { createMemoryStorage, createR2Storage } from "./lib/storage";
 
@@ -50,7 +51,7 @@ export function getApp() {
 
 // Local dev without Resend keys: everything that reads works, everything that would reach Resend says why it can't.
 const notConfigured = () => {
-    throw new Error("Resend isn't configured. Set RESEND_API_KEY and RESEND_WEBHOOK_SECRET in apps/api/.env.");
+    throw new UpstreamError("Resend isn't configured. Set RESEND_API_KEY and RESEND_WEBHOOK_SECRET in apps/api/.env.");
 };
 const resendUnavailable: ResendGateway = {
     createDomain: notConfigured,

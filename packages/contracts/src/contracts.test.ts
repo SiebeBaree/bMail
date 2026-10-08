@@ -5,6 +5,8 @@ import { createDomainSchema } from "./domains";
 import { createMailboxSchema } from "./mailboxes";
 import { sendMessageSchema } from "./messages";
 
+const id = "8f14e45f-ceea-4b67-8a55-6a86e93ac3e1";
+
 describe("createDomainSchema", () => {
     it("normalizes what people paste", () => {
         expect(createDomainSchema.parse({ name: "  Baree.BE " })).toEqual({ name: "baree.be" });
@@ -16,7 +18,7 @@ describe("createDomainSchema", () => {
 });
 
 describe("createMailboxSchema", () => {
-    const base = { id: crypto.randomUUID(), domainId: crypto.randomUUID(), displayName: "Siebe" };
+    const base = { id: id, domainId: id, displayName: "Siebe" };
 
     it("lowercases the local part", () => {
         expect(createMailboxSchema.parse({ ...base, localPart: "Hello" }).localPart).toBe("hello");
@@ -36,9 +38,9 @@ describe("updateConversationSchema", () => {
 describe("sendMessageSchema", () => {
     it("defaults to no tracking, no copies and no attachments", () => {
         const parsed = sendMessageSchema.parse({
-            id: crypto.randomUUID(),
-            conversationId: crypto.randomUUID(),
-            mailboxId: crypto.randomUUID(),
+            id: id,
+            conversationId: id,
+            mailboxId: id,
             to: [{ email: "jan@wouters.be" }],
             subject: "Hi",
             html: "<p>Hi</p>",
@@ -49,9 +51,9 @@ describe("sendMessageSchema", () => {
 
     it("rejects a mail without recipients", () => {
         const result = sendMessageSchema.safeParse({
-            id: crypto.randomUUID(),
-            conversationId: crypto.randomUUID(),
-            mailboxId: crypto.randomUUID(),
+            id: id,
+            conversationId: id,
+            mailboxId: id,
             to: [],
             subject: "Hi",
             html: "",

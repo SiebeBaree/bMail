@@ -6,7 +6,7 @@ on:
     pull_request:
 
 jobs:
-    checks:
+    api:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -25,13 +25,30 @@ jobs:
             - run: pnpm format:check
             - run: pnpm test
 
-            - run: pnpm build
-              env:
-                  SKIP_ENV_VALIDATION: 1
-                  VITE_SKIP_ENV_VALIDATION: 1
+            # The Swift client is generated from this file; a contract change without regenerating it fails here.
+            - name: OpenAPI document is up to date
+              run: |
+                  pnpm openapi
+                  git diff --exit-code apps/macos/MailKit/Sources/APIClient/openapi.json
 
-            - run: pnpm exec playwright install --with-deps chromium
+    macos:
+        # Needs a runner with Xcode 27 (macOS 27 SDK).
+        runs-on: macos-latest
+        defaults:
+            run:
+                working-directory: apps/macos
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-            - run: pnpm e2e
-              env:
-                  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+            - run: brew install xcodegen
+
+            - name: Test MailKit
+              working-directory: apps/macos/MailKit
+              run: swift test
+
+            - name: Build the app
+              run: |
+                  xcodegen generate
+                  xcodebuild -project Mail.xcodeproj -scheme Mail -configuration Debug \
+                      -skipPackagePluginValidation -skipMacroValidation \
+                      CODE_SIGNING_ALLOWED=NO build

@@ -1,0 +1,108 @@
+import Foundation
+import MailCore
+import Testing
+
+@testable import Providers
+
+@Suite struct AddressListTests {
+    @Test func splitsOnCommasOutsideQuotesAndBrackets() {
+        let addresses = AddressList.parse(#""Peeters, Lena" <Lena@Peeters.be>, tom@northfund.vc, Pieter Claes <pieter@northfund.vc>"#)
+        #expect(addresses == [
+            Address(name: "Peeters, Lena", email: "lena@peeters.be"),
+            Address(email: "tom@northfund.vc"),
+            Address(name: "Pieter Claes", email: "pieter@northfund.vc"),
+        ])
+    }
+
+    @Test func ignoresEmptyHeaders() {
+        #expect(AddressList.parse("").isEmpty)
+    }
+}
+
+@Suite struct MIMEMessageTests {
+    private func render(subject: String = "Proposal", attachments: [OutgoingAttachment] = []) throws -> String {
+        let message = OutgoingMessage(
+            conversationID: UUID(), accountID: UUID(), from: Address(name: "Siebe Baree", email: "siebe@gmail.com"),
+            to: [Address(name: "Jan Wouters", email: "jan@wouters.be")], bcc: [Address(email: "me@baree.be")],
+            subject: subject, html: "<p>Hi Jan</p>", text: "Hi Jan", attachments: attachments
+        )
+        let mime = MIMEMessage(message: message, inReplyTo: "<parent@x>", references: ["<root@x>", "<parent@x>"], messageID: "<id@baree.mail>")
+        return String(decoding: try mime.render(), as: UTF8.self)
+    }
+
+    @Test func carriesThreadingHeadersAndBothBodies() throws {
+        let raw = try render()
+        #expect(raw.contains("From: \"Siebe Baree\" <siebe@gmail.com>\r\n"))
+        #expect(raw.contains("In-Reply-To: <parent@x>\r\n"))
+        #expect(raw.contains("References: <root@x> <parent@x>\r\n"))
+        #expect(raw.contains("Bcc: me@baree.be\r\n"))
+        #expect(raw.contains("Content-Type: multipart/alternative"))
+        #expect(raw.contains(Data("<p>Hi Jan</p>".utf8).base64EncodedString()))
+        #expect(raw.contains(Data("Hi Jan".utf8).base64EncodedString()))
+    }
+
+    @Test func encodesSubjectsThatArentASCII() throws {
+        #expect(try render(subject: "Offerte voor Q4 ✓").contains("Subject: =?UTF-8?B?\(Data("Offerte voor Q4 ✓".utf8).base64EncodedString())?="))
+    }
+
+    @Test func wrapsAttachmentsInMultipartMixed() throws {
+        let file = FileManager.default.temporaryDirectory.appending(path: "proposal-\(UUID()).pdf")
+        try Data("%PDF".utf8).write(to: file)
+        let raw = try render(attachments: [OutgoingAttachment(filename: "proposal.pdf", contentType: "application/pdf", size: 4, fileURL: file)])
+        #expect(raw.contains("Content-Type: multipart/mixed"))
+        #expect(raw.contains(#"Content-Disposition: attachment; filename="proposal.pdf""#))
+        #expect(raw.contains(Data("%PDF".utf8).base64EncodedString()))
+    }
+}
+
+@Suite struct GmailMappingTests {
+    let mapping = GmailMapping(accountID: UUID())
+
+    private func thread(labels: [[String]]) throws -> Gmail.Thread {
+        let messages = labels.enumerated().map { index, labels in
+            """
+            {"id": "m\(index)", "threadId": "t1", "labelIds": \(labels), "snippet": "It&#39;s fine", "internalDate": "\(1_760_000_000_000 + index * 60_000)",
+             "payload": {"mimeType": "multipart/alternative", "headers": [
+                {"name": "From", "value": "\(labels.contains("SENT") ? "Siebe <siebe@gmail.com>" : "Lena Peeters <lena@peeters.be>")"},
+                {"name": "To", "value": "siebe@gmail.com"}, {"name": "Subject", "value": "Contract"},
+                {"name": "Message-ID", "value": "<m\(index)@mail.gmail.com>"}],
+              "parts": [
+                {"partId": "0", "mimeType": "text/plain", "body": {"size": 5, "data": "SGVsbG8"}},
+                {"partId": "1", "mimeType": "text/html", "body": {"size": 12, "data": "PHA-SGVsbG88L3A-"}},
+                {"partId": "2", "mimeType": "application/pdf", "filename": "contract.pdf", "body": {"size": 1200, "attachmentId": "ANGjdJ"}}]}}
+            """
+        }
+        let json = #"{"id": "t1", "messages": [\#(messages.joined(separator: ","))]}"#
+        return try JSONDecoder().decode(Gmail.Thread.self, from: Data(json.utf8))
+    }
+
+    @Test func labelsBecomeFolderReadAndStarredState() throws {
+        let (inbox, _) = try #require(mapping.conversation(try thread(labels: [["INBOX", "UNREAD"], ["SENT"]])))
+        #expect(inbox.folder == .inbox)
+        #expect(inbox.isRead == false)
+        #expect(inbox.lastOutboundAt != nil)
+
+        let (archived, _) = try #require(mapping.conversation(try thread(labels: [["STARRED"]])))
+        #expect(archived.folder == .done)
+        #expect(archived.isStarred)
+        #expect(archived.isRead)
+
+        let (trashed, _) = try #require(mapping.conversation(try thread(labels: [["TRASH"]])))
+        #expect(trashed.folder == .trash)
+    }
+
+    @Test func messagesKeepBodiesAttachmentsAndTheirOwnIds() throws {
+        let (conversation, messages) = try #require(mapping.conversation(try thread(labels: [["INBOX"], ["SENT"]])))
+        let first = try #require(messages.first)
+        #expect(first.text == "Hello")
+        #expect(first.html == "<p>Hello</p>")
+        #expect(first.snippet == "It's fine")
+        #expect(first.from == Address(name: "Lena Peeters", email: "lena@peeters.be"))
+        #expect(first.attachments.map(\.filename) == ["contract.pdf"])
+        #expect(first.attachments.first?.remoteID == "m0/ANGjdJ")
+        #expect(messages.last?.direction == .outbound)
+        // The same Gmail ids always map to the same rows, so a resync updates instead of duplicating.
+        #expect(conversation.id == mapping.conversationID(thread: "t1"))
+        #expect(first.id == mapping.messageID("m0"))
+    }
+}
