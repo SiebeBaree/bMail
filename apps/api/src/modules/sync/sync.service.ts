@@ -1,6 +1,6 @@
 import type { SyncResponse } from "@repo/contracts";
 import { conversations, domains, events, links, mailboxes, messages, syncState, type Database } from "@repo/db";
-import { and, asc, eq, gt, lte } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, lte } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import { toConversation, toDomain, toEvent, toMailbox } from "../../lib/dto";
@@ -8,7 +8,84 @@ import { messagesRepo } from "../messages/messages.repo";
 
 type Synced = { userId: AnyPgColumn; seq: AnyPgColumn };
 
+/** Vercel caps responses at 4.5 MB; a page of message bodies stops short of that. */
+const MESSAGE_BYTES_PER_PAGE = 3_000_000;
+
+/** Ids referenced by `ids` that aren't among the rows the page already has. */
+function missing<T>(ids: (string | null)[], have: T[], idOf: (row: T) => string) {
+    const present = new Set(have.map(idOf));
+    return [...new Set(ids.filter((id): id is string => id !== null && !present.has(id)))];
+}
+
+type Page = {
+    domains: (typeof domains.$inferSelect)[];
+    mailboxes: { mailbox: typeof mailboxes.$inferSelect; domainName: string }[];
+    conversations: (typeof conversations.$inferSelect)[];
+    messages: (typeof messages.$inferSelect)[];
+    events: { event: typeof events.$inferSelect; url: string | null }[];
+};
+
 export function syncService(db: Database) {
+    /**
+     * Every change moves a row to a new seq, so a message can come up pages before its conversation, which was starred
+     * since. The app's cache won't hold a row whose parent it hasn't seen, so parents past the ceiling ride along in
+     * their current state. Parents at or below it are already in the app or on this page. The ones that ride along
+     * come again on their own page later, which is harmless: the app upserts.
+     */
+    async function withParents(page: Page, ceiling: number) {
+        const messageIds = missing(
+            page.events.map((row) => row.event.messageId),
+            page.messages,
+            (row) => row.id,
+        );
+        if (messageIds.length > 0)
+            page.messages.push(
+                ...(await db
+                    .select()
+                    .from(messages)
+                    .where(and(inArray(messages.id, messageIds), gt(messages.seq, ceiling)))),
+            );
+        const conversationIds = missing(
+            page.messages.map((row) => row.conversationId),
+            page.conversations,
+            (row) => row.id,
+        );
+        if (conversationIds.length > 0) {
+            page.conversations.push(
+                ...(await db
+                    .select()
+                    .from(conversations)
+                    .where(and(inArray(conversations.id, conversationIds), gt(conversations.seq, ceiling)))),
+            );
+        }
+        const mailboxIds = missing(
+            page.conversations.map((row) => row.mailboxId),
+            page.mailboxes,
+            (row) => row.mailbox.id,
+        );
+        if (mailboxIds.length > 0) {
+            page.mailboxes.push(
+                ...(await db
+                    .select({ mailbox: mailboxes, domainName: domains.name })
+                    .from(mailboxes)
+                    .innerJoin(domains, eq(domains.id, mailboxes.domainId))
+                    .where(and(inArray(mailboxes.id, mailboxIds), gt(mailboxes.seq, ceiling)))),
+            );
+        }
+        const domainIds = missing(
+            page.mailboxes.map((row) => row.mailbox.domainId),
+            page.domains,
+            (row) => row.id,
+        );
+        if (domainIds.length > 0)
+            page.domains.push(
+                ...(await db
+                    .select()
+                    .from(domains)
+                    .where(and(inArray(domains.id, domainIds), gt(domains.seq, ceiling)))),
+            );
+    }
+
     return {
         /**
          * Rows changed after `cursor`, oldest first, up to `limit` per kind.
@@ -57,20 +134,37 @@ export function syncService(db: Database) {
                 eventRows.map((row) => row.event.seq),
             ];
             const fullPages = pages.filter((seqs) => seqs.length === limit);
-            const ceiling = fullPages.length > 0 ? Math.min(...fullPages.map((seqs) => seqs.at(-1) ?? head)) : head;
+            let ceiling = fullPages.length > 0 ? Math.min(...fullPages.map((seqs) => seqs.at(-1) ?? head)) : head;
+            // Bodies are the only big rows, so they also end a page early. At least one always fits.
+            let bytes = 0;
+            for (const [index, row] of messageRows.entries()) {
+                if (row.seq > ceiling) break;
+                bytes += (row.html?.length ?? 0) + (row.text?.length ?? 0);
+                if (bytes > MESSAGE_BYTES_PER_PAGE && index > 0) {
+                    ceiling = messageRows[index - 1]?.seq ?? ceiling;
+                    break;
+                }
+            }
             const upToCeiling = <T>(rows: T[], seqOf: (row: T) => number) =>
                 rows.filter((row) => seqOf(row) <= ceiling);
 
+            const page = {
+                domains: upToCeiling(domainRows, (row) => row.seq),
+                mailboxes: upToCeiling(mailboxRows, (row) => row.mailbox.seq),
+                conversations: upToCeiling(conversationRows, (row) => row.seq),
+                messages: upToCeiling(messageRows, (row) => row.seq),
+                events: upToCeiling(eventRows, (row) => row.event.seq),
+            };
+            await withParents(page, ceiling);
+
             return {
                 cursor: ceiling,
-                hasMore: fullPages.length > 0,
-                domains: upToCeiling(domainRows, (row) => row.seq).map(toDomain),
-                mailboxes: upToCeiling(mailboxRows, (row) => row.mailbox.seq).map((row) =>
-                    toMailbox(row.mailbox, row.domainName),
-                ),
-                conversations: upToCeiling(conversationRows, (row) => row.seq).map(toConversation),
-                messages: await messagesRepo(db).wireMessages(upToCeiling(messageRows, (row) => row.seq)),
-                events: upToCeiling(eventRows, (row) => row.event.seq).map((row) => toEvent(row.event, row.url)),
+                hasMore: ceiling < head,
+                domains: page.domains.map(toDomain),
+                mailboxes: page.mailboxes.map((row) => toMailbox(row.mailbox, row.domainName)),
+                conversations: page.conversations.map(toConversation),
+                messages: await messagesRepo(db).wireMessages(page.messages),
+                events: page.events.map((row) => toEvent(row.event, row.url)),
             };
         },
     };

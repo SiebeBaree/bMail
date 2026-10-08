@@ -10,13 +10,15 @@ struct GmailMapping {
     func messageID(_ id: String) -> Message.ID { UUID(stableFrom: "gmail:\(accountID):message:\(id)") }
 
     func conversation(_ thread: Gmail.Thread) -> (Conversation, [Message])? {
-        let wire = thread.messages ?? []
+        // Drafts aren't mail yet, and Gmail gives a draft a new id on every autosave.
+        let wire = (thread.messages ?? []).filter { !($0.labelIds ?? []).contains("DRAFT") }
         guard !wire.isEmpty else { return nil }
         let messages = wire.map(message)
         let labels = wire.map { Set($0.labelIds ?? []) }
         let all = labels.reduce(into: Set<String>()) { $0.formUnion($1) }
         let folder: Folder =
-            all.contains("INBOX") ? .inbox : labels.allSatisfy({ $0.contains("TRASH") }) ? .trash : all.contains("SPAM") ? .spam : .done
+            // Trash first: a trashed message can keep INBOX so untrashing knows where it goes back to.
+            labels.allSatisfy({ $0.contains("TRASH") }) ? .trash : all.contains("INBOX") ? .inbox : all.contains("SPAM") ? .spam : .done
         let conversation = Conversation(
             id: conversationID(thread: thread.id),
             accountID: accountID,
@@ -79,8 +81,20 @@ struct GmailMapping {
         return [part] + (part.parts ?? []).flatMap(flatten)
     }
 
+    /// Gmail hands bodies over in the charset they were written in, which its Content-Type names.
     private func decodedBody(_ part: Gmail.Part) -> String? {
-        part.body?.data.flatMap { Data(base64URLEncoded: $0) }.map { String(decoding: $0, as: UTF8.self) }
+        guard let data = part.body?.data.flatMap({ Data(base64URLEncoded: $0) }) else { return nil }
+        return String(data: data, encoding: charset(of: part)) ?? String(decoding: data, as: UTF8.self)
+    }
+
+    private func charset(of part: Gmail.Part) -> String.Encoding {
+        let contentType = part.headers?.first { $0.name.lowercased() == "content-type" }?.value ?? ""
+        guard let parameter = contentType.split(separator: ";").first(where: { $0.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("charset=") })
+        else { return .utf8 }
+        let name = parameter.split(separator: "=", maxSplits: 1).last?.trimmingCharacters(in: CharacterSet(charactersIn: "\"' ")) ?? ""
+        let encoding = CFStringConvertIANACharSetNameToEncoding(name as CFString)
+        guard encoding != kCFStringEncodingInvalidId else { return .utf8 }
+        return String.Encoding(rawValue: CFStringConvertEncodingToNSStringEncoding(encoding))
     }
 }
 

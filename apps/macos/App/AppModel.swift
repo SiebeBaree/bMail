@@ -57,9 +57,15 @@ final class AppModel {
         Typography.register()
         // The cache only holds what can be synced again, so one that won't open is deleted and rebuilt.
         let database: any DatabaseWriter
+        // The cache and the session belong to one server, so pointing the app at another starts signed out with an
+        // empty cache. `--args -resetCache YES` empties it on purpose.
+        let defaults = UserDefaults.standard
+        let serverChanged = defaults.string(forKey: "cacheServerURL") != Self.serverURL.absoluteString
+        if serverChanged { Keychain.delete(ServerConnection.sessionKey) }
+        defaults.set(Self.serverURL.absoluteString, forKey: "cacheServerURL")
+        let reset = serverChanged || defaults.bool(forKey: "resetCache")
         do {
-            // `--args -resetCache YES` starts from an empty cache on purpose.
-            database = try appDatabase(reset: UserDefaults.standard.bool(forKey: "resetCache"))
+            database = try appDatabase(reset: reset)
         } catch {
             do {
                 database = try appDatabase(reset: true)
@@ -82,10 +88,11 @@ final class AppModel {
         if server.isSignedIn { start() }
     }
 
-    /// Production unless overridden for development: `defaults write be.baree.mail serverURL http://localhost:3001`.
+    /// Production unless overridden for development: `open … --args -serverURL http://localhost:4317`. The app is
+    /// sandboxed, so `defaults write` from outside can't set it.
     static var serverURL: URL {
         UserDefaults.standard.string(forKey: "serverURL").flatMap(URL.init(string:))
-            ?? URL(string: "https://mail-api.baree.be")!
+            ?? URL(string: "https://api.mail.baree.be")!
     }
 
     func start() {
@@ -134,9 +141,16 @@ final class AppModel {
         configureProviders()
     }
 
+    /// Signing out makes this Mac forget the account: the cache and every Gmail and Outlook token go with it, so the next
+    /// person to sign in starts clean.
     func signOut() async {
         await engine.stop()
         await server.signOut()
+        for account in accounts where account.kind != .domain {
+            Keychain.delete("oauth.\(account.id.uuidString)")
+        }
+        try? store.eraseAll()
+        selection = nil
         phase = .signedOut
     }
 
@@ -168,7 +182,8 @@ final class AppModel {
             guard let conversation = selectedConversation else { return false }
             markReadTask?.cancel()
             apply(.setRead(conversation.id, !conversation.isRead), toast: conversation.isRead ? "Marked as unread" : "Marked as read")
-        case .undo: return undo()
+        // Z answers the newest toast first (Undo send, Undo archive), then walks back through earlier changes.
+        case .undo: return toasts.performLatestAction(key: "Z") || undo()
         case .compose: composer = ComposerModel.new(app: self)
         case .reply, .replyAll, .forward:
             guard let id = selection else { return false }

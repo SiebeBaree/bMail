@@ -7,12 +7,15 @@ import { eq } from "drizzle-orm";
 
 import { createAuth } from "../auth";
 
-// Local development only: fills the dev database with the inbox from the design mocks, so the app has something real
-// to render without Resend. Refuses to run against anything that isn't a Neon dev branch or localhost.
+// Local development only: fills a dev database with the inbox from the design mocks, so the app has something real
+// to render without Resend. It only reads SEED_DATABASE_URL, never DATABASE_URL, so a .env pointing at production
+// can't be seeded by accident: the seeded user has a known password.
 if (process.env.NODE_ENV !== "development") throw new Error("The seed only runs with NODE_ENV=development.");
+const seedDatabaseUrl = process.env.SEED_DATABASE_URL;
+if (!seedDatabaseUrl) throw new Error("Set SEED_DATABASE_URL to a dev database to seed it.");
 
 const OWNER = { email: env.ALLOWED_EMAILS[0] ?? "siebe@baree.be", password: "dev-password-123", name: "Siebe Baree" };
-const db = createDb(env.DATABASE_URL);
+const db = createDb(seedDatabaseUrl);
 const auth = createAuth({
     db,
     baseURL: env.PUBLIC_URL,

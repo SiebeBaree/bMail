@@ -32,12 +32,17 @@ public struct ServerAdmin: Sendable {
     }
 
     public func setCatchAll(_ mailboxID: Account.ID?, for domainID: Domain.ID) async throws -> ChangeSet {
-        let response = try await connection.client.updateDomain(
-            path: .init(id: domainID.wire),
-            body: .json(.init(catchAllMailboxId: mailboxID?.wire))
-        )
-        guard case let .ok(ok) = response else { throw ProviderError(.unavailable, "Couldn't change the catch-all.") }
-        return ChangeSet(domain: Domain(try ok.body.json))
+        let domain: Wire.Domain
+        if let mailboxID {
+            let response = try await connection.client.updateDomain(path: .init(id: domainID.wire), body: .json(.init(catchAllMailboxId: mailboxID.wire)))
+            guard case let .ok(ok) = response else { throw ProviderError(.unavailable, "Couldn't change the catch-all.") }
+            domain = try ok.body.json
+        } else {
+            let response = try await connection.client.clearCatchAll(path: .init(id: domainID.wire))
+            guard case let .ok(ok) = response else { throw ProviderError(.unavailable, "Couldn't turn the catch-all off.") }
+            domain = try ok.body.json
+        }
+        return ChangeSet(domain: Domain(domain))
     }
 
     public func removeDomain(_ id: Domain.ID) async throws -> ChangeSet {

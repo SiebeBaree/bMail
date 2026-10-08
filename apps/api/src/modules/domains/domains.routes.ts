@@ -55,6 +55,19 @@ export const domainsRoutes: FastifyPluginAsyncZod = async (app) => {
         (request) => service.update(request.userId, request.params.id, request.body),
     );
 
+    // Its own route because the generated Swift client leaves nil fields out, so a PATCH can't carry a null.
+    app.delete(
+        "/domains/:id/catch-all",
+        {
+            schema: {
+                operationId: "clearCatchAll",
+                params: idParamSchema,
+                response: { 200: domainSchema, 404: errorSchema },
+            },
+        },
+        (request) => service.update(request.userId, request.params.id, { catchAllMailboxId: null }),
+    );
+
     app.delete(
         "/domains/:id",
         {

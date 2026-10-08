@@ -34,7 +34,9 @@ public struct OutlookProvider: MailProvider {
         let folders = try await wellKnownFolders()
         var query = ["$select": Graph.messageFields, "$top": "100"]
         if let cursor {
-            query["$filter"] = "lastModifiedDateTime gt \(cursor)"
+            // `ge`, not `gt`: the timestamps have one-second precision, so a later change in the cursor's second
+            // would otherwise be skipped. Seeing the newest change twice is harmless.
+            query["$filter"] = "lastModifiedDateTime ge \(cursor)"
             query["$orderby"] = "lastModifiedDateTime asc"
         } else {
             query["$orderby"] = "receivedDateTime desc"
@@ -158,8 +160,11 @@ public struct OutlookProvider: MailProvider {
         case let .setRead(_, isRead):
             for id in remote { try await api.patch("messages/\(id)", body: ["isRead": isRead]) }
         case let .setStarred(_, isStarred):
-            guard let latest = remote.last else { return }
-            try await api.patch("messages/\(latest)", body: ["flag": ["flagStatus": isStarred ? "flagged" : "notFlagged"]])
+            // Starring flags the latest message. A conversation counts as starred while any message is flagged, so
+            // unstarring clears them all.
+            for id in isStarred ? Array(remote.suffix(1)) : remote {
+                try await api.patch("messages/\(id)", body: ["flag": ["flagStatus": isStarred ? "flagged" : "notFlagged"]])
+            }
         case let .move(_, _, to):
             let destination = switch to {
             case .inbox: "inbox"
@@ -223,7 +228,8 @@ public struct OutlookProvider: MailProvider {
         }
         try await api.post("messages/\(created.id)/send")
 
-        var changes = try await pull(conversationOf: created.id)
+        // The mail is out, so a failed read-back mustn't fail the send: the next pull brings Outlook's copy.
+        var changes = (try? await pull(conversationOf: created.id)) ?? ChangeSet()
         changes.removedMessageIDs = [message.id]
         if parent == nil { changes.removedConversationIDs = [message.conversationID] }
         return changes

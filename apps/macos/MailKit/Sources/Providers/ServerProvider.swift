@@ -97,7 +97,7 @@ public struct ServerProvider: MailProvider {
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue(file.contentType, forHTTPHeaderField: "content-type")
-        let (_, uploadResponse) = try await URLSession.shared.upload(for: request, fromFile: file.fileURL)
+        let (_, uploadResponse) = try await ServerConnection.session.upload(for: request, fromFile: file.fileURL)
         guard (uploadResponse as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) == true else {
             throw ProviderError(.unavailable, "Couldn't upload \(file.filename). Trying again shortly.")
         }

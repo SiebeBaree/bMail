@@ -5,6 +5,7 @@ import MailCore
 struct GmailAPI: Sendable {
     let tokens: TokenStore
     private let base = URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/")!
+    private let pacer = Pacer()
 
     func get<Response: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> Response {
         try await send(path, method: "GET", query: query, body: Optional<Empty>.none)
@@ -21,25 +22,72 @@ struct GmailAPI: Sendable {
         if !query.isEmpty { components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) } }
         var request = URLRequest(url: components.url!)
         request.httpMethod = method
-        request.setValue("Bearer \(try await tokens.accessToken())", forHTTPHeaderField: "authorization")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "content-type")
             request.httpBody = try JSONEncoder().encode(body)
         }
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw ProviderError(.unavailable, "Can't reach Gmail.")
+        var attempt = 0
+        while true {
+            try await pacer.wait()
+            request.setValue("Bearer \(try await tokens.accessToken())", forHTTPHeaderField: "authorization")
+            let data: Data
+            let response: HTTPURLResponse
+            do {
+                let (bytes, urlResponse) = try await URLSession.shared.data(for: request)
+                guard let http = urlResponse as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+                (data, response) = (bytes, http)
+            } catch {
+                throw ProviderError(.unavailable, "Can't reach Gmail.")
+            }
+            switch response.statusCode {
+            case 200..<300: return try JSONDecoder().decode(Response.self, from: data)
+            case 401: throw ProviderError(.unauthorized, "Gmail needs you to sign in again.")
+            case 404: throw GmailNotFound()
+            case 403 where !Self.isRateLimit(data), 400:
+                throw ProviderError(.rejected, "Gmail refused that: \(Self.message(in: data))")
+            case 403, 429, 500...:
+                // Rate limits come back as 429 or as a 403 with a rate limit reason. Both clear on their own.
+                guard attempt < 4 else { throw ProviderError(.unavailable, "Gmail asked us to slow down. Trying again shortly.") }
+                let retryAfter = response.value(forHTTPHeaderField: "retry-after").flatMap(Double.init)
+                try await Task.sleep(for: .seconds(retryAfter ?? pow(2, Double(attempt))))
+                attempt += 1
+            default:
+                throw ProviderError(.unavailable, "Gmail is having trouble. Trying again shortly.")
+            }
         }
-        switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
-        case 200..<300: return try JSONDecoder().decode(Response.self, from: data)
-        case 401: throw ProviderError(.unauthorized, "Gmail needs you to sign in again.")
-        case 404: throw GmailNotFound()
-        case 400, 403: throw ProviderError(.rejected, "Gmail refused that: \(String(decoding: data, as: UTF8.self).prefix(200))")
-        default: throw ProviderError(.unavailable, "Gmail is having trouble. Trying again shortly.")
+    }
+
+    private struct ErrorBody: Decodable {
+        struct Detail: Decodable {
+            struct Reason: Decodable { var reason: String? }
+            var message: String?
+            var status: String?
+            var errors: [Reason]?
         }
+
+        var error: Detail
+    }
+
+    private static func isRateLimit(_ data: Data) -> Bool {
+        guard let error = try? JSONDecoder().decode(ErrorBody.self, from: data).error else { return false }
+        let reasons = (error.errors ?? []).compactMap(\.reason)
+        return error.status == "RESOURCE_EXHAUSTED" || reasons.contains { $0 == "rateLimitExceeded" || $0 == "userRateLimitExceeded" }
+    }
+
+    private static func message(in data: Data) -> String {
+        (try? JSONDecoder().decode(ErrorBody.self, from: data).error.message) ?? String(decoding: data.prefix(200), as: UTF8.self)
+    }
+}
+
+/// Gmail meters each user at roughly 250 quota units a second and a thread fetch costs 10, so a first sync firing
+/// requests as fast as it can trips the limit within a second. Spacing requests 50 ms apart stays under it.
+private actor Pacer {
+    private var next = ContinuousClock.now
+
+    func wait() async throws {
+        let slot = max(next, .now)
+        next = slot + .milliseconds(50)
+        try await Task.sleep(until: slot)
     }
 }
 

@@ -2,6 +2,7 @@ import AuthenticationServices
 import DesignSystem
 import MailCore
 import Providers
+import SQLiteData
 import SwiftUI
 
 struct SettingsView: View {
@@ -63,6 +64,7 @@ private struct AccountSettings: View {
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @State private var error: String?
     @State private var connecting: Account.Kind?
+    @FetchAll(Account.order(by: \.position)) private var accounts
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -81,14 +83,16 @@ private struct AccountSettings: View {
                 }
             }
             if let error { Text(error).foregroundStyle(Color.danger) }
-            ForEach(Array(model.accounts.enumerated()), id: \.element.id) { index, account in
+            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                 HStack(spacing: 12) {
                     Avatar(account.displayName, size: 24)
                     Text(account.address)
                     Text(account.kind.label).foregroundStyle(Color.textMuted)
                     Spacer()
                     if account.kind != .domain {
-                        Button("Disconnect") { try? model.disconnect(account) }
+                        Button("Disconnect") {
+                            do { try model.disconnect(account) } catch { self.error = error.localizedDescription }
+                        }
                             .buttonStyle(.ghost)
                     }
                     if index < 9 { KeyCap("⌘\(index + 1)") }

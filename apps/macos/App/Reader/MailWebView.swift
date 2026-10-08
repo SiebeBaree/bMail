@@ -59,7 +59,7 @@ enum WebPageFactory {
         if let rules { return rules }
         let patterns = [
             #"^https?://t\.[^/]+/o/"#,
-            #"^https?://[^/]*mail-api[^/]*/o/"#,
+            "^https?://" + NSRegularExpression.escapedPattern(for: AppModel.serverURL.host() ?? "") + "/o/",
             #"^https?://[^/]+/wf/open"#,
             #"^https?://[^/]*list-manage\.com/track/open"#,
             #"^https?://[^/]*mandrillapp\.com/track/open"#,

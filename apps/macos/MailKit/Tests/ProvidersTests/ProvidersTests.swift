@@ -76,6 +76,22 @@ import Testing
         return try JSONDecoder().decode(Gmail.Thread.self, from: Data(json.utf8))
     }
 
+    @Test func bodiesDecodeInTheirOwnCharset() throws {
+        // "café" in ISO-8859-1, where é is the single byte E9.
+        let json = #"""
+        {"id": "m1", "threadId": "t1", "payload": {"mimeType": "text/plain",
+         "headers": [{"name": "Content-Type", "value": "text/plain; charset=\"ISO-8859-1\""}],
+         "body": {"size": 4, "data": "Y2Fm6Q"}}}
+        """#
+        let message = mapping.message(try JSONDecoder().decode(Gmail.Message.self, from: Data(json.utf8)))
+        #expect(message.text == "café")
+    }
+
+    @Test func draftsAreLeftOut() throws {
+        let (_, messages) = try #require(mapping.conversation(try thread(labels: [["INBOX"], ["DRAFT"]])))
+        #expect(messages.count == 1)
+    }
+
     @Test func labelsBecomeFolderReadAndStarredState() throws {
         let (inbox, _) = try #require(mapping.conversation(try thread(labels: [["INBOX", "UNREAD"], ["SENT"]])))
         #expect(inbox.folder == .inbox)
@@ -104,5 +120,25 @@ import Testing
         // The same Gmail ids always map to the same rows, so a resync updates instead of duplicating.
         #expect(conversation.id == mapping.conversationID(thread: "t1"))
         #expect(first.id == mapping.messageID("m0"))
+    }
+}
+
+@Suite struct GmailSyncPositionTests {
+    @Test func aFirstSyncInProgressSurvivesTheStore() {
+        let page = GmailProvider.SyncPosition.InitialPage(historyID: "9001", pageToken: "next", fetched: 50)
+        guard case let .initial(restored) = GmailProvider.SyncPosition(GmailProvider.SyncPosition.initial(page).cursor) else {
+            Issue.record("expected the first sync to resume")
+            return
+        }
+        #expect(restored.historyID == "9001")
+        #expect(restored.pageToken == "next")
+        #expect(restored.fetched == 50)
+    }
+
+    @Test func aPlainHistoryIdFollowsHistory() {
+        guard case .history("9001") = GmailProvider.SyncPosition("9001") else {
+            Issue.record("expected a history cursor")
+            return
+        }
     }
 }

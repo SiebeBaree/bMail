@@ -77,7 +77,12 @@ export function sendService({ db, resend, storage, trackingTokens, publicUrl }: 
             const target = await mailboxesRepo(db).findWithDomain(userId, input.mailboxId);
             if (!target) throw new NotFoundError("That mailbox doesn't exist anymore.");
             const { mailbox, domain } = target;
-            if (domain.status !== "verified") {
+            // Resend calls a domain partially verified when sending works but receiving doesn't yet, or the reverse.
+            // Sending only needs DKIM and SPF.
+            const canSend = domain.records
+                .filter((record) => record.purpose === "dkim" || record.purpose === "spf")
+                .every((record) => record.status === "verified");
+            if (domain.status !== "verified" && !canSend) {
                 throw new ConflictError(`${domain.name} isn't verified yet, so mail from it would bounce.`);
             }
             const from: Address = { name: mailbox.displayName, email: `${mailbox.localPart}@${domain.name}` };

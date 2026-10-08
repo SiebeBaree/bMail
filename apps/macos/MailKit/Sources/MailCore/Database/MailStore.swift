@@ -64,6 +64,16 @@ public struct MailStore: Sendable {
         try database.read { db in try SyncCursor.find(source).fetchOne(db)?.cursor }
     }
 
+    /// Empties the cache, for signing out: everything in it belongs to whoever was signed in.
+    public func eraseAll() throws {
+        try database.write { db in
+            // Deleting accounts and domains cascades to their conversations, messages and events.
+            for table in ["accounts", "domains", "pendingMutations", "outboxItems", "syncCursors", "contacts", "messageTexts"] {
+                try db.execute(sql: #"DELETE FROM "\#(table)""#)
+            }
+        }
+    }
+
     // MARK: - Your changes
 
     /// Applies a mutation locally and queues it for the provider, atomically.
@@ -77,8 +87,9 @@ public struct MailStore: Sendable {
         }
     }
 
-    public func nextPendingMutation() throws -> PendingMutation? {
-        try database.read { db in try PendingMutation.order(by: \.id).limit(1).fetchOne(db) }
+    /// Every queued mutation, oldest first.
+    public func pendingMutations() throws -> [PendingMutation] {
+        try database.read { db in try PendingMutation.order(by: \.id).fetchAll(db) }
     }
 
     public func completeMutation(_ id: PendingMutation.ID) throws {

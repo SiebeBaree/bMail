@@ -46,7 +46,7 @@ import Testing
         try store.merge(changes([conversation], []), source: "server")
         #expect(try fetch(conversation.id).folder == .done)
 
-        let pending = try #require(try store.nextPendingMutation())
+        let pending = try #require(try store.pendingMutations().first)
         try store.completeMutation(pending.id)
         try store.merge(changes([conversation], []), source: "server")
         #expect(try fetch(conversation.id).folder == .inbox)
@@ -56,10 +56,10 @@ import Testing
         let conversation = conversation()
         try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1)]), source: "server")
         try store.perform(.setStarred(conversation.id, true))
-        try store.abandonMutation(try #require(try store.nextPendingMutation()))
+        try store.abandonMutation(try #require(try store.pendingMutations().first))
 
         #expect(try fetch(conversation.id).isStarred == false)
-        #expect(try store.nextPendingMutation() == nil)
+        #expect(try store.pendingMutations().isEmpty)
     }
 
     @Test func undoSendRemovesTheMessageAndTheConversationItStarted() throws {
@@ -88,6 +88,20 @@ import Testing
         #expect(try store.search("termin") == [contract.id])
         #expect(try store.search("arne") == [dinner.id])
         #expect(try store.search("nothing here").isEmpty)
+    }
+
+    @Test func signingOutLeavesNothingBehind() throws {
+        let conversation = conversation(subject: "Contract draft v3")
+        try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1, text: "Page 4")]), source: "server")
+        try store.perform(.setRead(conversation.id, true))
+
+        try store.eraseAll()
+
+        let left = try store.database.read { db in
+            try Account.fetchCount(db) + Conversation.fetchCount(db) + PendingMutation.fetchCount(db) + SyncCursor.fetchCount(db)
+        }
+        #expect(left == 0)
+        #expect(try store.search("contract").isEmpty)
     }
 
     @Test func trackedLinksResolveToTheirOriginalDestination() throws {

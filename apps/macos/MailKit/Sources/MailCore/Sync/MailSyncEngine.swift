@@ -94,12 +94,15 @@ public actor MailSyncEngine {
     }
 
     private func pushMutations() async {
-        while let pending = try? store.nextPendingMutation() {
+        // A provider that fails keeps its order and waits for the next pass; the others carry on.
+        var blocked = Set<String>()
+        for pending in (try? store.pendingMutations()) ?? [] {
             guard let provider = try? provider(for: pending.mutation.conversationID) else {
                 // The account is gone, so there's nobody left to tell.
                 try? store.completeMutation(pending.id)
                 continue
             }
+            guard !blocked.contains(provider.source) else { continue }
             do {
                 try await provider.push(pending.mutation)
                 try store.completeMutation(pending.id)
@@ -107,10 +110,10 @@ public actor MailSyncEngine {
                 try? store.abandonMutation(pending)
                 await status.report(error.message)
             } catch {
-                // Offline or the server is down: keep the order, try the whole queue again next pass.
+                // Offline or the server is down: try this provider's queue again next pass.
                 try? store.recordFailedAttempt(pending.id)
                 await status.failed(provider.source, error)
-                return
+                blocked.insert(provider.source)
             }
         }
     }
@@ -118,7 +121,12 @@ public actor MailSyncEngine {
     private func sendDueMessages() async {
         guard let due = try? store.dueOutboxItems() else { return }
         for item in due {
-            guard let provider = try? provider(forAccount: item.message.accountID) else { continue }
+            guard let provider = try? provider(forAccount: item.message.accountID) else {
+                if !accountExists(item.message.accountID) {
+                    try? store.failSend(item.id, error: "That account is gone.", permanently: true, retryAt: .now)
+                }
+                continue
+            }
             do {
                 let changes = try await provider.send(item.message)
                 try store.completeSend(item.id, with: changes, source: provider.source)
@@ -135,7 +143,8 @@ public actor MailSyncEngine {
     /// Wakes the engine when the next message's undo window closes, instead of waiting for the next pull.
     private func scheduleOutboxTimer() {
         outboxTimer?.cancel()
-        guard let next = try? store.nextOutboxDate() else { return }
+        // A message that's already due waits for the next pull, so one that can't go out doesn't spin the loop.
+        guard let next = try? store.nextOutboxDate(), next > Date() else { return }
         outboxTimer = Task { [weak self] in
             try? await Task.sleep(for: .seconds(max(0, next.timeIntervalSinceNow)))
             guard !Task.isCancelled else { return }
@@ -151,6 +160,10 @@ public actor MailSyncEngine {
         }
         guard let accountID else { return nil }
         return try provider(forAccount: accountID)
+    }
+
+    private func accountExists(_ id: Account.ID) -> Bool {
+        (try? store.database.read { db in try Account.find(id).fetchCount(db) }).map { $0 > 0 } ?? true
     }
 
     private func provider(forAccount id: Account.ID) throws -> (any MailProvider)? {

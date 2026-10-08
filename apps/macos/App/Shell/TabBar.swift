@@ -65,11 +65,12 @@ private struct SyncLabel: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 5)) { context in
             Group {
-                if model.syncStatus.isOffline {
+                if !model.syncStatus.failing.isEmpty {
                     HStack(spacing: 6) {
                         StatusDot(.warning)
-                        Text("Offline")
+                        Text(model.syncStatus.isOffline ? "Offline" : "Sync failed")
                     }
+                    .help(model.syncStatus.failing.values.map(\.message).sorted().joined(separator: "\n"))
                 } else if let date = model.syncStatus.lastSyncedAt {
                     Text("Synced \(relative(date, now: context.date))")
                 } else {

@@ -80,6 +80,15 @@ describe("mailboxes", () => {
         expect(domain).toMatchObject({ id: domainId, catchAllMailboxId: mailboxId });
     });
 
+    it("turns the catch-all off", async () => {
+        const { domainId } = await harness.seedMailbox(headers);
+        const domain = expectStatus(
+            await harness.app.inject({ method: "DELETE", url: `/domains/${domainId}/catch-all`, headers }),
+            200,
+        );
+        expect(domain).toMatchObject({ id: domainId, catchAllMailboxId: null });
+    });
+
     it("refuses a second mailbox with the same address", async () => {
         const { domainId } = await harness.seedMailbox(headers);
         const response = await harness.app.inject({

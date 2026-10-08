@@ -54,7 +54,7 @@ targets:
         # OAuth client ids. Not secrets: both are public clients that use PKCE.
         # Google: an iOS-type client for bundle id be.baree.mail. Microsoft: a public client app registration with
         # redirect uri msauth.be.baree.mail://auth.
-        GOOGLE_CLIENT_ID: ""
+        GOOGLE_CLIENT_ID: "120617231468-9n56accj81imqh2a7638n8hsstlfad5e.apps.googleusercontent.com"
         MICROSOFT_CLIENT_ID: ""
 schemes:
   Mail:

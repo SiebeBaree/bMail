@@ -27,31 +27,68 @@ public struct GmailProvider: MailProvider {
     }
 
     public func pull(after cursor: String?) async throws -> ChangeSet {
-        if let cursor {
+        switch cursor.map(SyncPosition.init) {
+        case nil:
+            // Taken before the first page, so whatever changes while the first sync pages through is caught after.
+            let profile: Gmail.Profile = try await api.get("profile")
+            return try await initialPage(.init(historyID: profile.historyId))
+        case let .initial(page): return try await initialPage(page)
+        case let .history(historyID):
             do {
-                return try await changes(since: cursor)
+                return try await changes(since: historyID)
             } catch is GmailNotFound {
                 // History ids expire after about a week offline; start over from the newest threads.
-                return try await initialSync()
+                return try await pull(after: nil)
             }
         }
-        return try await initialSync()
     }
 
-    private func initialSync() async throws -> ChangeSet {
-        let profile: Gmail.Profile = try await api.get("profile")
-        var threadIDs: [String] = []
-        var pageToken: String?
-        repeat {
-            var query = ["maxResults": "100", "q": "-in:chats"]
-            if let pageToken { query["pageToken"] = pageToken }
-            let page: Gmail.ThreadList = try await api.get("threads", query: query)
-            threadIDs += (page.threads ?? []).map(\.id)
-            pageToken = page.nextPageToken
-        } while pageToken != nil && threadIDs.count < Self.initialThreads
-        var changes = try await fetch(threads: Array(threadIDs.prefix(Self.initialThreads)))
-        changes.cursor = profile.historyId
+    /// One page of the newest threads. The cursor remembers how far the first sync got, so a failure halfway resumes
+    /// instead of starting over, and the inbox fills in while the rest loads.
+    private func initialPage(_ position: SyncPosition.InitialPage) async throws -> ChangeSet {
+        var query = ["maxResults": "50", "q": "-in:chats"]
+        if let pageToken = position.pageToken { query["pageToken"] = pageToken }
+        let page: Gmail.ThreadList = try await api.get("threads", query: query)
+        let ids = (page.threads ?? []).map(\.id)
+        var changes = try await fetch(threads: ids)
+        let fetched = position.fetched + ids.count
+        if let next = page.nextPageToken, fetched < Self.initialThreads {
+            changes.cursor = SyncPosition.initial(.init(historyID: position.historyID, pageToken: next, fetched: fetched)).cursor
+            changes.hasMore = true
+        } else {
+            changes.cursor = position.historyID
+        }
         return changes
+    }
+
+    /// The stored cursor: a plain history id once the first sync is done, `initial:<json>` while it pages through.
+    enum SyncPosition {
+        struct InitialPage: Codable {
+            var historyID: String
+            var pageToken: String? = nil
+            var fetched = 0
+        }
+
+        case initial(InitialPage)
+        case history(String)
+
+        private static let prefix = "initial:"
+
+        init(_ cursor: String) {
+            if cursor.hasPrefix(Self.prefix),
+               let page = try? JSONDecoder().decode(InitialPage.self, from: Data(cursor.dropFirst(Self.prefix.count).utf8)) {
+                self = .initial(page)
+            } else {
+                self = .history(cursor)
+            }
+        }
+
+        var cursor: String {
+            switch self {
+            case let .initial(page): Self.prefix + String(decoding: (try? JSONEncoder().encode(page)) ?? Data(), as: UTF8.self)
+            case let .history(historyID): historyID
+            }
+        }
     }
 
     private func changes(since historyID: String) async throws -> ChangeSet {
@@ -75,7 +112,8 @@ public struct GmailProvider: MailProvider {
         return changes
     }
 
-    /// Fetches full threads, eight at a time. A thread that's gone was deleted and leaves the cache too.
+    /// Fetches full threads, eight at a time. A thread that's gone was deleted and leaves the cache too, and so does a
+    /// cached message its thread no longer has (deleted in Gmail).
     private func fetch(threads ids: [String]) async throws -> ChangeSet {
         var changes = ChangeSet()
         try await withThrowingTaskGroup(of: (String, Gmail.Thread?).self) { group in
@@ -101,6 +139,13 @@ public struct GmailProvider: MailProvider {
                 next()
             }
         }
+        let fetched = Set(changes.messages.map(\.id))
+        let conversationIDs = changes.conversations.map(\.id)
+        // Only rows Gmail knows about: an optimistic reply that hasn't gone out yet has no remote id.
+        let cached = try await store.database.read { db in
+            try Message.where { conversationIDs.contains($0.conversationID) && $0.remoteID.isNot(nil) }.select(\.id).fetchAll(db)
+        }
+        changes.removedMessageIDs = cached.filter { !fetched.contains($0) }
         return changes
     }
 
@@ -147,9 +192,10 @@ public struct GmailProvider: MailProvider {
             var threadId: String?
         }
         let sent: Gmail.Sent = try await api.post("messages/send", body: Body(raw: try mime.render().base64URLEncoded, threadId: threadID))
-        var changes = try await fetch(threads: [sent.threadId])
+        // The mail is out, so a failed read-back mustn't fail the send: the next pull brings Gmail's copy.
+        var changes = (try? await fetch(threads: [sent.threadId])) ?? ChangeSet()
         // Gmail's copy replaces the optimistic one, which had the ids the composer gave it.
-        changes.removedMessageIDs = [message.id]
+        changes.removedMessageIDs.append(message.id)
         changes.removedConversationIDs = threadID == nil ? [message.conversationID] : []
         return changes
     }

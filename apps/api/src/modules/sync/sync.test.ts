@@ -62,6 +62,28 @@ describe("GET /sync", () => {
         expect(subjects.toSorted()).toEqual(["Mail 0", "Mail 1", "Mail 2", "Mail 3", "Mail 4"]);
     });
 
+    it("sends a message's conversation along when the conversation changed since", async () => {
+        await receive(3);
+        const { conversations } = await sync();
+        // Starring moves the first conversation past its message in seq order.
+        await harness.app.inject({
+            method: "PATCH",
+            url: `/conversations/${conversations[0]?.id}`,
+            headers,
+            payload: { isStarred: true },
+        });
+        // What a fresh install has after each page.
+        const known = new Set<string>();
+        let cursor = 0;
+        for (let page = 0; page < 10; page++) {
+            const response = await sync(cursor, 1);
+            for (const conversation of response.conversations) known.add(conversation.id);
+            for (const message of response.messages) expect(known).toContain(message.conversationId);
+            cursor = response.cursor;
+            if (!response.hasMore) break;
+        }
+    });
+
     it("sends a conversation again after it changes", async () => {
         await receive(1);
         const { cursor, conversations } = await sync();

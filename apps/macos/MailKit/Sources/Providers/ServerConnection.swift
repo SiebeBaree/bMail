@@ -12,13 +12,23 @@ public final class ServerConnection: Sendable {
 
     public let baseURL: URL
     let client: Client
+    /// Never stores or sends cookies. Better Auth answers sign-in with a session cookie as well as the bearer token, and a
+    /// request that carries a cookie without an Origin header fails its CSRF check, so a remembered cookie would break
+    /// every sign-in after the first.
+    static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        return URLSession(configuration: configuration)
+    }()
 
     public init(baseURL: URL) {
         self.baseURL = baseURL
         self.client = Client(
             serverURL: baseURL,
             configuration: Configuration(dateTranscoder: .iso8601WithFractionalSeconds),
-            transport: URLSessionTransport(),
+            transport: URLSessionTransport(configuration: .init(session: Self.session)),
             middlewares: [BearerMiddleware()]
         )
     }
@@ -67,7 +77,7 @@ public final class ServerConnection: Sendable {
         if let token = Keychain.read(Self.sessionKey) { request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
         request.httpBody = try JSONEncoder().encode(body)
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await Self.session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             return (data, response)
         } catch let error as URLError {

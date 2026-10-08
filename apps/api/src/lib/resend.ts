@@ -105,7 +105,7 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
                         attachments: email.attachments.map((file) => ({
                             filename: file.filename,
                             path: file.url,
-                            content_type: file.contentType,
+                            contentType: file.contentType,
                         })),
                     },
                     { idempotencyKey },
