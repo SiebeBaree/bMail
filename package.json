@@ -1,0 +1,24 @@
+{
+    "name": "mail-baree-be",
+    "private": true,
+    "scripts": {
+        "dev": "turbo dev",
+        "typecheck": "turbo typecheck",
+        "lint": "turbo lint",
+        "test": "turbo test",
+        "format": "oxfmt",
+        "format:check": "oxfmt --check",
+        "openapi": "pnpm --filter api openapi",
+        "db:generate": "pnpm --filter @repo/db db:generate",
+        "db:migrate": "pnpm --filter @repo/db db:migrate",
+        "db:studio": "pnpm --filter @repo/db db:studio"
+    },
+    "devDependencies": {
+        "@types/node": "^26.2.0",
+        "oxfmt": "^0.72.0",
+        "oxlint": "^1.87.0",
+        "turbo": "^2.11.7",
+        "typescript": "catalog:"
+    },
+    "packageManager": "pnpm@11.24.0"
+}

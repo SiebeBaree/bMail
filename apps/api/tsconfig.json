@@ -1,0 +1,12 @@
+{
+    "extends": "@repo/typescript-config/node.json",
+    // target, module and moduleResolution repeat the base config on purpose: Vercel's Fastify builder reads this
+    // file before resolving "extends" and injects NodeNext, ES2021 and strict false for any key it finds missing,
+    // which breaks type identities across the pnpm workspace during its build-time check.
+    "compilerOptions": {
+        "target": "es2023",
+        "module": "esnext",
+        "moduleResolution": "bundler"
+    },
+    "include": ["src", "vitest.config.ts"]
+}

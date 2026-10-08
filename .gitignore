@@ -1,0 +1,16 @@
+node_modules
+.turbo
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+.vercel
+
+# Xcode
+apps/macos/build
+# Generated from apps/macos/project.yml by XcodeGen
+apps/macos/*.xcodeproj
+apps/macos/.swiftpm
+apps/macos/MailKit/.build
+DerivedData
