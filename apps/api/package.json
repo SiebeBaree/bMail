@@ -38,6 +38,7 @@
         "@types/node": "^26.2.0",
         "tsx": "^4.23.15",
         "typescript": "^5.9.3",
+        "undici-types": "~8.9.0",
         "vitest": "catalog:"
     }
 }
