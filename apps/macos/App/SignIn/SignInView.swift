@@ -22,11 +22,7 @@ struct SignInView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: "envelope")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.onInverted)
-                .frame(width: 36, height: 36)
-                .background(Color.inverted, in: .rect(cornerRadius: 9))
+            LogoMark(size: 36)
                 .padding(.bottom, 8)
             Text("Sign in to bMail").font(.geist(22, .semibold)).tracking(-0.4)
 

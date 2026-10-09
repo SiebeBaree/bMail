@@ -1,4 +1,4 @@
-// Draws the app icon into the asset catalog: a black squircle with a white envelope, nothing else.
+// Draws the app icon into the asset catalog: a black squircle with the paper plane, the same mark as LogoMark.
 // Run from apps/macos: swift scripts/make-icon.swift
 import AppKit
 
@@ -26,19 +26,19 @@ func draw(size: Int) -> Data {
         rim.lineWidth = 4
         rim.stroke()
 
-        let envelope = CGRect(x: 272, y: 352, width: 480, height: 330)
-        let outline = NSBezierPath(roundedRect: envelope, xRadius: 44, yRadius: 44)
-        outline.lineWidth = 38
-        NSColor.white.setStroke()
-        outline.stroke()
-        let flap = NSBezierPath()
-        flap.move(to: CGPoint(x: envelope.minX + 34, y: envelope.maxY - 38))
-        flap.line(to: CGPoint(x: envelope.midX, y: envelope.midY - 6))
-        flap.line(to: CGPoint(x: envelope.maxX - 34, y: envelope.maxY - 38))
-        flap.lineWidth = 38
-        flap.lineCapStyle = .round
-        flap.lineJoinStyle = .round
-        flap.stroke()
+        // LogoMark's 100 by 100 grid, top down, mapped onto the body.
+        func triangle(_ points: [(CGFloat, CGFloat)], _ color: NSColor) {
+            let path = NSBezierPath()
+            for (index, (x, y)) in points.enumerated() {
+                let point = CGPoint(x: body.minX + x / 100 * body.width, y: body.maxY - y / 100 * body.height)
+                if index == 0 { path.move(to: point) } else { path.line(to: point) }
+            }
+            path.close()
+            color.setFill()
+            path.fill()
+        }
+        triangle([(18, 50), (82, 22), (60, 80)], .white)
+        triangle([(60, 80), (48, 56), (82, 22)], NSColor(white: 0.56, alpha: 1))
         return true
     }
     let representation = NSBitmapImageRep(data: image.tiffRepresentation!)!

@@ -49,12 +49,7 @@ private struct TrailingControls: View {
 
 private struct Logo: View {
     var body: some View {
-        Image(systemName: "envelope")
-            .font(.system(size: 11, weight: .bold))
-            .foregroundStyle(Color.onInverted)
-            .frame(width: 22, height: 22)
-            .background(Color.inverted, in: .rect(cornerRadius: 6))
-            .accessibilityLabel("bMail")
+        LogoMark(size: 22)
     }
 }
 
