@@ -89,7 +89,7 @@ private struct AccountsSection: View {
     @FetchAll(Domain.order(by: \.name)) private var domains
     @State private var isAddOpen = false
     @State private var newAddressDomain: Domain.ID?
-    @State private var connecting: Account.Kind?
+    @State private var isConnecting = false
     @State private var error: String?
 
     var body: some View {
@@ -98,11 +98,11 @@ private struct AccountsSection: View {
                 Button { isAddOpen.toggle() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
-                        Text(connecting.map { "Connecting \($0.label)" } ?? "Add account")
+                        Text(isConnecting ? "Connecting Gmail" : "Add account")
                     }
                 }
                 .buttonStyle(.secondary)
-                .disabled(connecting != nil)
+                .disabled(isConnecting)
                 .dropdown(isPresented: $isAddOpen, alignment: .trailing) { addOptions }
             }
             if let error {
@@ -114,7 +114,7 @@ private struct AccountsSection: View {
             if let domain = domains.first(where: { $0.id == newAddressDomain }) {
                 NewAddressRow(domain: domain, create: { createAddress($0, on: domain) }, cancel: { newAddressDomain = nil })
             } else if accounts.isEmpty {
-                Text("No accounts yet. Add Gmail, Outlook or an address on your own domain.")
+                Text("No accounts yet. Add Gmail or an address on your own domain.")
                     .foregroundStyle(Color.textMuted)
                     .padding(.vertical, 16)
             }
@@ -123,12 +123,9 @@ private struct AccountsSection: View {
 
     @ViewBuilder private var addOptions: some View {
         if BuildSettings.google != nil {
-            option("Gmail", detail: "Sign in with Google", symbol: "envelope") { connect(.gmail) }
+            option("Gmail", detail: "Sign in with Google", symbol: "envelope", action: connectGmail)
         }
-        if BuildSettings.microsoft != nil {
-            option("Outlook", detail: "Sign in with Microsoft", symbol: "envelope") { connect(.outlook) }
-        }
-        if !domains.isEmpty, BuildSettings.google != nil || BuildSettings.microsoft != nil {
+        if !domains.isEmpty, BuildSettings.google != nil {
             Hairline().padding(.vertical, 4)
         }
         ForEach(domains) { domain in
@@ -194,12 +191,12 @@ private struct AccountsSection: View {
         }
     }
 
-    private func connect(_ kind: Account.Kind) {
-        guard let client = kind == .gmail ? BuildSettings.google : BuildSettings.microsoft else { return }
-        connecting = kind
+    private func connectGmail() {
+        guard let client = BuildSettings.google else { return }
+        isConnecting = true
         error = nil
         Task {
-            defer { connecting = nil }
+            defer { isConnecting = false }
             do {
                 let attempt = client.start()
                 let callback = try await webAuthenticationSession.authenticate(
@@ -208,7 +205,7 @@ private struct AccountsSection: View {
                     preferredBrowserSession: .ephemeral,
                     additionalHeaderFields: [:]
                 )
-                try model.connect(kind, tokens: try await client.finish(attempt, callback: callback))
+                try model.connectGmail(tokens: try await client.finish(attempt, callback: callback))
             } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
                 return
             } catch {
@@ -397,7 +394,6 @@ extension Account.Kind {
         switch self {
         case .domain: "Your domain"
         case .gmail: "Gmail"
-        case .outlook: "Outlook"
         }
     }
 }

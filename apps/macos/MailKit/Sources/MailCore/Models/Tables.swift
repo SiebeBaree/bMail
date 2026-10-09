@@ -1,14 +1,13 @@
 import Foundation
 import SQLiteData
 
-/// One address you read and send from: a mailbox on your own domain, a Gmail account or an Outlook account.
+/// One address you read and send from: a mailbox on your own domain or a Gmail account.
 @Table
 public struct Account: Hashable, Identifiable, Sendable {
     public enum Kind: String, Codable, Sendable, QueryBindable {
         /// A mailbox on one of your own domains, served by the api.
         case domain
         case gmail
-        case outlook
     }
 
     public let id: UUID
@@ -32,7 +31,6 @@ public struct Account: Hashable, Identifiable, Sendable {
         switch kind {
         case .domain: String(address.prefix { $0 != "@" })
         case .gmail: "gmail"
-        case .outlook: "outlook"
         }
     }
 }
@@ -77,7 +75,7 @@ public struct Conversation: Hashable, Identifiable, Sendable {
     public var snoozedUntil: Date?
     public var lastMessageAt: Date
     public var lastOutboundAt: Date?
-    /// The provider's own id (a Gmail thread id, an Outlook conversation id). Nil for your own domains, whose ids are ours.
+    /// The provider's own id (a Gmail thread id). Nil for your own domains, whose ids are ours.
     public var remoteID: String?
 
     // Derived from the messages whenever they change, so a list row never has to look at a message.
@@ -219,7 +217,7 @@ public struct MessageEvent: Hashable, Identifiable, Sendable {
     public var isReader: Bool { source == nil || source == .person || source == .googleProxy }
 }
 
-/// One of your labels. They're bMail's own, kept by the api for every account, so Gmail and Outlook never see them.
+/// One of your labels. They're bMail's own, kept by the api for every account, so Gmail never sees them.
 /// Not `Label`, which every view file would read as SwiftUI's.
 @Table("labels")
 public struct MailLabel: Hashable, Identifiable, Sendable {
@@ -245,7 +243,7 @@ public struct ConversationLabel: Hashable, Sendable {
     }
 }
 
-/// A message sent from Gmail or Outlook with tracking, as the api knows it. The provider's copy of the message doesn't
+/// A message sent from Gmail with tracking, as the api knows it. The provider's copy of the message doesn't
 /// say it's tracked, so this is laid over it whenever either arrives.
 @Table
 public struct TrackedSend: Hashable, Identifiable, Sendable {

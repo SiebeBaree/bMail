@@ -150,7 +150,7 @@ public struct MailStore: Sendable {
         }
     }
 
-    /// Marks messages sent from Gmail or Outlook with tracking as tracked, with their links. Their providers' copies
+    /// Marks messages sent from Gmail with tracking as tracked, with their links. Their providers' copies
     /// don't carry that, so it's laid over them each time either side arrives. Returns the conversations it changed.
     private func overlayTrackedSends(on ids: [Message.ID], in db: Database) throws -> [Conversation.ID] {
         guard !ids.isEmpty else { return [] }

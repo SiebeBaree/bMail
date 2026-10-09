@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { trackedLinkSchema } from "./messages";
 
-/** Html the app is about to send from Gmail or Outlook, to be instrumented for tracking. */
+/** Html the app is about to send from Gmail, to be instrumented for tracking. */
 export const trackMessageSchema = z
     .object({
         /** The app's id for the message. A retry with the same id returns the same html. */
@@ -18,7 +18,7 @@ export const trackedHtmlSchema = z
     })
     .meta({ id: "TrackedHtml" });
 
-/** A Gmail or Outlook message the api tracks. Its opens and clicks arrive as events with this id as `messageId`. */
+/** A Gmail message the api tracks. Its opens and clicks arrive as events with this id as `messageId`. */
 export const trackedMessageSchema = z
     .object({
         id: z.uuid(),

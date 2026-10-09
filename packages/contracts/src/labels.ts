@@ -26,7 +26,7 @@ export const updateLabelSchema = z
     })
     .meta({ id: "UpdateLabel" });
 
-/** Every label on one conversation. Any conversation id works, including Gmail and Outlook ones. */
+/** Every label on one conversation. Any conversation id works, including Gmail ones. */
 export const conversationLabelsSchema = z
     .object({
         conversationId: z.uuid(),

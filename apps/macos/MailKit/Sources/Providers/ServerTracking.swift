@@ -2,7 +2,7 @@ import APIClient
 import Foundation
 import MailCore
 
-/// Tracking for mail sent from Gmail and Outlook. The api adds the open pixel and tracked links and keeps the record,
+/// Tracking for mail sent from Gmail. The api adds the open pixel and tracked links and keeps the record,
 /// so opens and clicks arrive through its sync like those of mail sent from your own domains.
 public struct ServerTracking: Sendable {
     private let connection: ServerConnection

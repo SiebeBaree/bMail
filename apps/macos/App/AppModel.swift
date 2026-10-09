@@ -117,7 +117,7 @@ final class AppModel {
         Task { await engine.start() }
     }
 
-    /// One provider for your domains plus one per Gmail or Outlook account. Called again whenever accounts change.
+    /// One provider for your domains plus one per Gmail account. Called again whenever accounts change.
     func configureProviders() {
         var providers: [any MailProvider] = [ServerProvider(connection: server, store: store)]
         for account in accounts {
@@ -127,23 +127,19 @@ final class AppModel {
                 if let client = BuildSettings.google {
                     providers.append(GmailProvider(account: account, client: client, store: store, tracking: ServerTracking(connection: server)))
                 }
-            case .outlook:
-                if let client = BuildSettings.microsoft {
-                    providers.append(OutlookProvider(account: account, client: client, store: store, tracking: ServerTracking(connection: server)))
-                }
             }
         }
         Task { [engine] in await engine.setProviders(providers) }
     }
 
-    /// Adds a Gmail or Outlook account after its OAuth sign-in. The id follows from the address, so connecting the same
+    /// Adds a Gmail account after its OAuth sign-in. The id follows from the address, so connecting the same
     /// account again replaces it instead of adding a second one.
-    func connect(_ kind: Account.Kind, tokens: OAuthTokens) throws {
+    func connectGmail(tokens: OAuthTokens) throws {
         guard let address = tokens.email?.lowercased() else {
             throw ProviderError(.rejected, "The sign-in didn't say which account it was for. Try again.")
         }
         let account = Account(
-            id: UUID(stableFrom: "\(kind.rawValue):\(address)"), kind: kind, address: address,
+            id: UUID(stableFrom: "gmail:\(address)"), kind: .gmail, address: address,
             displayName: address, domainID: nil, position: 1_000 + accounts.count
         )
         try TokenStore.save(tokens, for: account.id)
@@ -163,7 +159,7 @@ final class AppModel {
         configureProviders()
     }
 
-    /// Signing out makes this Mac forget the account: the cache and every Gmail and Outlook token go with it, so the next
+    /// Signing out makes this Mac forget the account: the cache and every Gmail token goes with it, so the next
     /// person to sign in starts clean.
     func signOut() async {
         await engine.stop()
@@ -455,8 +451,6 @@ final class AppModel {
                     guard let client = BuildSettings.google else { return }
                     data = try await GmailProvider(account: account, client: client, store: store, tracking: ServerTracking(connection: server))
                         .download(attachment)
-                case .outlook:
-                    throw ProviderError(.rejected, "Outlook attachments open in Outlook for now.")
                 }
                 try data.write(to: destination, options: .atomic)
                 NSWorkspace.shared.open(destination)

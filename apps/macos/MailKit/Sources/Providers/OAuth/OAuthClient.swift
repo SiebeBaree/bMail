@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import MailCore
 
-/// OAuth 2.0 for a public client: authorization code with PKCE, no client secret. Used for Google and Microsoft, both
+/// OAuth 2.0 for a public client: authorization code with PKCE, no client secret. Used for Google, which
 /// for signing in and for mail access.
 public struct OAuthClient: Sendable {
     public struct Configuration: Sendable {

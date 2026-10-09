@@ -148,7 +148,7 @@ final class ComposerModel {
         return model
     }
 
-    /// Gmail and Outlook keep the copy of a tracked message that went out, pixel included. Quoting it would send that
+    /// Gmail keeps the copy of a tracked message that went out, pixel included. Quoting it would send that
     /// pixel along again and count the next reader of this reply as an open of the old message.
     static func withoutOpenPixels(_ html: String) -> String {
         html.replacing(/<img[^>]+\/o\/[0-9a-f-]{36}\.[^>]*>/.ignoresCase(), with: "")

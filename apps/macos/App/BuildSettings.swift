@@ -2,7 +2,7 @@ import Foundation
 import Security
 import Providers
 
-/// The OAuth clients this build was configured with, from project.yml. A provider without an id is simply not offered.
+/// The OAuth client this build was configured with, from project.yml. Without an id Gmail is simply not offered.
 enum BuildSettings {
     static var google: OAuthClient? {
         clientID("GoogleClientID").map { OAuthClient.google(clientID: $0, mail: true) }
@@ -10,10 +10,6 @@ enum BuildSettings {
 
     static var googleSignIn: OAuthClient? {
         clientID("GoogleClientID").map { OAuthClient.google(clientID: $0, mail: false) }
-    }
-
-    static var microsoft: OAuthClient? {
-        clientID("MicrosoftClientID").map(OAuthClient.microsoft)
     }
 
     /// Sign in with Apple needs its entitlement, which needs a provisioning profile. Builds without one don't offer it.

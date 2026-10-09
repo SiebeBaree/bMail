@@ -14,7 +14,7 @@ type Dependencies = { db: Database; trackingTokens: TrackingTokens; publicUrl: s
 export function trackedMessagesService({ db, trackingTokens, publicUrl }: Dependencies) {
     return {
         /**
-         * Instruments html the app sends from Gmail or Outlook, through the api's own host since those senders have
+         * Instruments html the app sends from Gmail, through the api's own host since those senders have
          * no t.<domain>. A retry with the same id reuses the stored links in order, so it returns the same html and
          * stores nothing new.
          */

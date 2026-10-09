@@ -20,7 +20,5 @@
 	<string>1</string>
 	<key>GoogleClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
-	<key>MicrosoftClientID</key>
-	<string>$(MICROSOFT_CLIENT_ID)</string>
 </dict>
 </plist>

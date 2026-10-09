@@ -42,7 +42,7 @@ export function syncService(db: Database) {
      * Every change moves a row to a new seq, so a message can come up pages before its conversation, which was starred
      * since. The app's cache won't hold a row whose parent it hasn't seen, so parents past the ceiling ride along in
      * their current state. Parents at or below it are already in the app or on this page. The ones that ride along
-     * come again on their own page later, which is harmless: the app upserts. Events of tracked Gmail and Outlook
+     * come again on their own page later, which is harmless: the app upserts. Events of tracked Gmail
      * mail have no parent here, the app has that message itself.
      */
     async function withParents(page: Page, ceiling: number) {

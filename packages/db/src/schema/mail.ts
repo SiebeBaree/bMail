@@ -183,7 +183,7 @@ export const attachments = pgTable(
 );
 
 /**
- * Mail the app sent from Gmail or Outlook with tracking on. The id is the app's id for that message; its links and
+ * Mail the app sent from Gmail with tracking on. The id is the app's id for that message; its links and
  * events point here instead of at `messages`.
  */
 export const trackedMessages = pgTable(
@@ -250,7 +250,7 @@ export const labels = pgTable(
 );
 
 /**
- * The labels on one conversation, the whole set in one row so setting them is one upsert. Gmail and Outlook
+ * The labels on one conversation, the whole set in one row so setting them is one upsert. Gmail
  * conversations only exist in the app, so the id has no foreign key.
  */
 export const conversationLabels = pgTable(

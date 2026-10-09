@@ -75,7 +75,7 @@ export function messagesRepo(db: Database | Transaction) {
                 ),
             );
         },
-        /** Gmail and Outlook messages the api tracks, in wire format with their links. */
+        /** Gmail messages the api tracks, in wire format with their links. */
         async wireTrackedMessages(rows: TrackedMessageRow[]): Promise<TrackedMessage[]> {
             if (rows.length === 0) return [];
             const trackedLinks = await db

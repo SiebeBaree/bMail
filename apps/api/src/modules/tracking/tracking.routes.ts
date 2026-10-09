@@ -50,7 +50,7 @@ export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
     });
 };
 
-/** Mail sent through the api with tracking on, or Gmail and Outlook mail the app had instrumented. */
+/** Mail sent through the api with tracking on, or Gmail mail the app had instrumented. */
 async function trackedMessage(db: Database, id: string) {
     const [row] = await db
         .select({ id: messages.id, userId: messages.userId, sentAt: messages.sentAt })
