@@ -6,7 +6,7 @@ struct MailApp: App {
     @State private var model = AppModel()
 
     var body: some Scene {
-        Window("Baree Mail", id: "main") {
+        Window("bMail", id: "main") {
             RootView()
                 .environment(model)
                 .frame(minWidth: 960, minHeight: 600)

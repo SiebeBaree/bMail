@@ -3,7 +3,7 @@ import MailCore
 import SwiftUI
 
 /// What happened to a message you sent: delivery, then every open and click, people and machines apart. Machines are
-/// shown hollow and greyed and never counted, because Apple's proxy and link scanners aren't readers.
+/// shown hollow and greyed and never counted, because Apple's proxy and security scanners aren't readers.
 struct ActivityView: View {
     let message: Message
     let events: [MessageEvent]
@@ -16,9 +16,9 @@ struct ActivityView: View {
         _showsEvents = State(initialValue: message.trackingEnabled)
     }
 
-    private var opens: [MessageEvent] { events.filter { $0.kind == .opened && $0.countsAsPerson } }
-    private var clicks: [MessageEvent] { events.filter { $0.kind == .clicked && $0.countsAsPerson } }
-    private var lastActivity: MessageEvent? { events.last { ($0.kind == .opened || $0.kind == .clicked) && $0.countsAsPerson } }
+    private var opens: [MessageEvent] { events.filter { $0.kind == .opened && $0.isReader } }
+    private var clicks: [MessageEvent] { events.filter { $0.kind == .clicked && $0.isReader } }
+    private var lastActivity: MessageEvent? { events.last { ($0.kind == .opened || $0.kind == .clicked) && $0.isReader } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -89,7 +89,7 @@ private struct ActivityStrip: View {
                 context.stroke(Path { $0.move(to: CGPoint(x: labelWidth, y: y)); $0.addLine(to: CGPoint(x: size.width, y: y)) }, with: .color(.line), lineWidth: 1)
                 for event in events where event.kind == kind {
                     let rect = CGRect(x: x(event.occurredAt) - 5, y: y - 5, width: 10, height: 10)
-                    if event.countsAsPerson {
+                    if event.isReader {
                         context.fill(Path(ellipseIn: rect.insetBy(dx: -2, dy: -2)), with: .color(.canvas))
                         context.fill(Path(ellipseIn: rect), with: .color(.textPrimary))
                     } else {
@@ -101,7 +101,7 @@ private struct ActivityStrip: View {
                 context.draw(Text(MailDate.short(date)).font(.meta).foregroundStyle(Color.textFaint), at: CGPoint(x: x(date), y: 66), anchor: anchor)
             }
         }
-        .accessibilityLabel("\(events.filter { $0.kind == .opened && $0.countsAsPerson }.count) opens and \(events.filter { $0.kind == .clicked && $0.countsAsPerson }.count) clicks over time")
+        .accessibilityLabel("\(events.filter { $0.kind == .opened && $0.isReader }.count) opens and \(events.filter { $0.kind == .clicked && $0.isReader }.count) clicks over time")
     }
 }
 
@@ -113,7 +113,7 @@ private struct Timeline: View {
             ForEach(events) { event in
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Group {
-                        if event.countsAsPerson {
+                        if event.isReader {
                             Circle().fill(event.kind == .delivered ? Color.success : event.kind.isFailure ? Color.danger : Color.textPrimary)
                         } else {
                             Circle().strokeBorder(Color.textFaint, lineWidth: 1)
@@ -129,7 +129,7 @@ private struct Timeline: View {
                     Text(event.summary)
                         .lineLimit(1)
                 }
-                .foregroundStyle(event.countsAsPerson ? Color.textSecondary : Color.textFaint)
+                .foregroundStyle(event.isReader ? Color.textSecondary : Color.textFaint)
                 .padding(.vertical, 6)
             }
         }
@@ -148,7 +148,7 @@ private struct LinkTable: View {
                 HStack {
                     Text(link.url.host().map { $0 + link.url.path() } ?? link.url.absoluteString).lineLimit(1)
                     Spacer()
-                    Text(label(people: clicks.filter(\.countsAsPerson).count, machines: clicks.count(where: { !$0.countsAsPerson })))
+                    Text(label(people: clicks.filter(\.isReader).count, machines: clicks.count(where: { !$0.isReader })))
                         .font(.meta)
                         .foregroundStyle(Color.textMuted)
                 }
@@ -185,8 +185,10 @@ extension MessageEvent {
     var summary: String {
         switch source {
         case .appleProxy: return "Apple privacy proxy, on delivery"
-        case .googleProxy: return "Gmail image proxy, location hidden"
-        case .scanner: return [url.flatMap(URL.init(string:)).map(Self.short), "link scanner"].compactMap(\.self).joined(separator: " · ")
+        case .googleProxy: return "Gmail, location hidden by Google"
+        case .scanner:
+            if kind == .opened { return "Security scanner, on delivery" }
+            return [url.flatMap(URL.init(string:)).map(Self.short), "link scanner"].compactMap(\.self).joined(separator: " · ")
         case .person, nil:
             let place = [city, country].compactMap(\.self).joined(separator: ", ")
             let parts = [url.flatMap(URL.init(string:)).map(Self.short), device, place.isEmpty ? nil : place, detail]

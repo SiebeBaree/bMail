@@ -48,7 +48,6 @@ struct ConversationView: View {
                 .padding(.horizontal, 32)
                 .padding(.top, 26)
                 .padding(.bottom, 24)
-                .frame(maxWidth: 820, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             if model.composer == nil, let last = thread.messages.last {

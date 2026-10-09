@@ -7,16 +7,20 @@ private let logger = Logger(subsystem: "be.baree.mail", category: "Sync")
 /// Moves data between the store and the providers: pulls changes, pushes queued mutations and sends the outbox. Views
 /// never talk to it for data; they read the store and redraw when it changes.
 public actor MailSyncEngine {
-    /// How often providers are asked for changes while the app is in front. Focus, wake and every local change also
+    /// How often providers are asked for changes while a window is on screen. Focus, wake and every local change also
     /// trigger a pass right away.
-    public static let pullInterval: Duration = .seconds(10)
+    public static let visibleInterval: Duration = .seconds(10)
+    /// While nothing is on screen, only often enough to retry pushes that failed. Coming back on screen pulls right away.
+    public static let hiddenInterval: Duration = .seconds(300)
 
     private let store: MailStore
     private let status: SyncStatus
     private var providers: [any MailProvider] = []
     private var loop: Task<Void, Never>?
+    private var ticker: Task<Void, Never>?
     private var outboxTimer: Task<Void, Never>?
     private var wakeUp: AsyncStream<Void>.Continuation?
+    private var isVisible = true
 
     public init(store: MailStore, status: SyncStatus) {
         self.store = store
@@ -34,27 +38,40 @@ public actor MailSyncEngine {
         wakeUp = continuation
         loop = Task { [weak self] in
             await self?.pass()
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask {
-                    while !Task.isCancelled {
-                        try? await Task.sleep(for: Self.pullInterval)
-                        continuation.yield()
-                    }
-                }
-                for await _ in signals {
-                    guard let self else { break }
-                    await self.pass()
-                }
-                group.cancelAll()
+            for await _ in signals {
+                guard let self else { break }
+                await self.pass()
             }
         }
+        startTicker()
     }
 
     public func stop() {
         loop?.cancel()
         loop = nil
+        ticker?.cancel()
+        ticker = nil
         wakeUp?.finish()
         wakeUp = nil
+    }
+
+    /// Polls slowly while no window is on screen, and pulls as soon as one is again.
+    public func setVisible(_ visible: Bool) {
+        guard visible != isVisible else { return }
+        isVisible = visible
+        startTicker()
+        if visible { signal() }
+    }
+
+    private func startTicker() {
+        ticker?.cancel()
+        guard let wakeUp else { return }
+        let interval = isVisible ? Self.visibleInterval : Self.hiddenInterval
+        ticker = Task {
+            while (try? await Task.sleep(for: interval)) != nil {
+                wakeUp.yield()
+            }
+        }
     }
 
     /// Runs a pass as soon as the current one finishes.
@@ -81,7 +98,10 @@ public actor MailSyncEngine {
                 var cursor = try store.cursor(for: provider.source)
                 repeat {
                     let changes = try await provider.pull(after: cursor)
-                    try store.merge(changes, source: provider.source)
+                    // Nothing new means no write at all, so an idle pass costs one request and nothing else.
+                    if !changes.isEmpty || changes.cursor != cursor {
+                        try store.merge(changes, source: provider.source)
+                    }
                     cursor = changes.cursor
                     if !changes.hasMore { break }
                 } while !Task.isCancelled

@@ -23,7 +23,8 @@ export const env = createEnv({
     server: {
         DATABASE_URL: z.url(),
         PORT: z.coerce.number().int().positive().default(3001),
-        PUBLIC_URL: isProd ? z.url() : z.url().default("http://localhost:3001"),
+        // Tracking pixels and links are built from it, and Gmail's image proxy never loads an http pixel.
+        PUBLIC_URL: isProd ? z.url({ protocol: /^https$/ }) : z.url().default("http://localhost:3001"),
         ALLOWED_EMAILS: commaList,
 
         BETTER_AUTH_SECRET: isProd

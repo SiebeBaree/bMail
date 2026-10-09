@@ -9,13 +9,14 @@ struct ConversationList: View {
 
     var body: some View {
         let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, searchIDs: model.searchResults)
+        let tags = model.accountFilter == nil ? query.tags : [:]
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(query.conversations) { conversation in
                         ConversationRow(
                             conversation: conversation,
-                            accountTag: model.accountFilter == nil ? query.tags[conversation.accountID] : nil,
+                            accountTag: tags[conversation.accountID],
                             showsSentTime: model.tab == .sent || model.tab == .tracked,
                             isSelected: model.selection == conversation.id
                         )

@@ -54,56 +54,102 @@ private struct Logo: View {
             .foregroundStyle(Color.onInverted)
             .frame(width: 22, height: 22)
             .background(Color.inverted, in: .rect(cornerRadius: 6))
-            .accessibilityLabel("Baree Mail")
+            .accessibilityLabel("bMail")
     }
 }
 
-/// Like Vercel's team switcher: one click to see every account, numbers to jump straight to one.
+/// Like Vercel's team switcher: one click to see every account, ⌘0 to ⌘9 to jump straight to one.
 private struct AccountSwitcher: View {
     @Environment(AppModel.self) private var model
     @FetchAll(Account.order(by: \.position)) private var accounts
+    @State private var isOpen = false
 
     var body: some View {
-        Menu {
-            Button {
-                model.perform(.allAccounts)
-            } label: {
-                Text("All accounts")
-            }
-            .keyboardShortcut("0")
-            Divider()
-            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
-                Button(account.address) { model.perform(.account(index + 1)) }
-                    .keyboardShortcut(KeyEquivalent(Character(String(min(index + 1, 9)))))
-            }
-            Divider()
-            Button("Add account…") { model.openSettings() }
-        } label: {
+        Button { isOpen.toggle() } label: {
             HStack(spacing: 8) {
-                if let current {
-                    Avatar(current.displayName, size: 20)
-                } else {
-                    Image(systemName: "square.stack")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.textSecondary)
-                        .frame(width: 20, height: 20)
-                        .background(Color.selected, in: .circle)
-                }
+                AccountMark(current)
                 Text(current?.address ?? "All accounts")
                     .font(.uiMedium)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(Color.textMuted)
             }
+            .padding(.horizontal, 6)
+            .frame(height: 28)
+            .background(isOpen ? Color.selected : .clear, in: .rect(cornerRadius: Metrics.controlRadius))
             .contentShape(.rect)
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
         .fixedSize()
+        .dropdown(isPresented: $isOpen) {
+            row(nil, key: "⌘0") { model.perform(.allAccounts) }
+            ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                row(account, key: index < 9 ? "⌘\(index + 1)" : nil) { model.perform(.account(index + 1)) }
+            }
+            Hairline().padding(.vertical, 4)
+            Button {
+                isOpen = false
+                model.openSettings()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                    Text("Add account")
+                }
+                .foregroundStyle(Color.textSecondary)
+            }
+            .buttonStyle(.dropdownItem)
+        }
+    }
+
+    private func row(_ account: Account?, key: String?, action: @escaping () -> Void) -> some View {
+        Button {
+            isOpen = false
+            action()
+        } label: {
+            HStack(spacing: 10) {
+                AccountMark(account)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(account?.address ?? "All accounts")
+                    if let account {
+                        Text(account.kind.label).font(.geist(11.5)).foregroundStyle(Color.textMuted)
+                    }
+                }
+                Spacer(minLength: 16)
+                if account?.id == model.accountFilter {
+                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                }
+                if let key { KeyCap(key) }
+            }
+            .padding(.vertical, 4)
+        }
+        .buttonStyle(.dropdownItem)
     }
 
     private var current: Account? {
         accounts.first { $0.id == model.accountFilter }
+    }
+}
+
+/// An account's initials, or a stack for all of them together.
+private struct AccountMark: View {
+    let account: Account?
+
+    init(_ account: Account?) {
+        self.account = account
+    }
+
+    var body: some View {
+        if let account {
+            Avatar(account.displayName, size: 20)
+        } else {
+            Image(systemName: "square.stack")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Color.textSecondary)
+                .frame(width: 20, height: 20)
+                .background(Color.selected, in: .circle)
+        }
     }
 }
 
@@ -146,20 +192,33 @@ private struct SearchField: View {
 
 private struct AccountMenu: View {
     @Environment(AppModel.self) private var model
+    @State private var isOpen = false
 
     var body: some View {
-        Menu {
-            Button("Settings…") { model.openSettings() }
-                .keyboardShortcut(",")
-            Button("Keyboard shortcuts") { model.perform(.shortcuts) }
-            Divider()
-            Button("Sign out") { Task { await model.signOut() } }
-        } label: {
+        Button { isOpen.toggle() } label: {
             Avatar("Siebe Baree", size: 26)
         }
-        .menuStyle(.button)
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
         .fixedSize()
+        .dropdown(isPresented: $isOpen, alignment: .trailing) {
+            item("Settings", key: "⌘,") { model.openSettings() }
+            item("Keyboard shortcuts", key: "?") { model.perform(.shortcuts) }
+            Hairline().padding(.vertical, 4)
+            item("Sign out", key: nil) { Task { await model.signOut() } }
+        }
+    }
+
+    private func item(_ title: String, key: String?, action: @escaping () -> Void) -> some View {
+        Button {
+            isOpen = false
+            action()
+        } label: {
+            HStack {
+                Text(title)
+                Spacer(minLength: 16)
+                if let key { KeyCap(key) }
+            }
+        }
+        .buttonStyle(.dropdownItem)
     }
 }

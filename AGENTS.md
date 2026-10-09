@@ -42,7 +42,7 @@ Api modules are tested by injecting requests into a fully built app on PGlite (i
 
 The app target holds the views, grouped by feature, plus `AppModel` (state and the one place commands run) and `Command` (the keymap that drives keys, the palette, the shortcut sheet and the menu bar).
 
-Run it against a local api: start the api (`PORT=4317 PUBLIC_URL=http://localhost:4317 pnpm --filter api dev`), seed it once (`SEED_DATABASE_URL=<dev database> pnpm --filter api seed`; the seed never touches `DATABASE_URL`), build, then `open "…/Baree Mail.app" --args -serverURL http://localhost:4317`. Debug builds also accept `-sessionToken <token>` and `-resetCache YES`.
+Run it against a local api: start the api (`PORT=4317 PUBLIC_URL=http://localhost:4317 pnpm --filter api dev`), seed it once (`SEED_DATABASE_URL=<dev database> pnpm --filter api seed`; the seed never touches `DATABASE_URL`), build, then `open "…/bMail.app" --args -serverURL http://localhost:4317`. Debug builds also accept `-sessionToken <token>` and `-resetCache YES`.
 
 ## Things you need to know
 

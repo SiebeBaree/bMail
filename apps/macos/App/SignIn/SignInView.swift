@@ -28,7 +28,7 @@ struct SignInView: View {
                 .frame(width: 36, height: 36)
                 .background(Color.inverted, in: .rect(cornerRadius: 9))
                 .padding(.bottom, 8)
-            Text("Sign in to Baree Mail").font(.geist(22, .semibold)).tracking(-0.4)
+            Text("Sign in to bMail").font(.geist(22, .semibold)).tracking(-0.4)
 
             VStack(spacing: 10) {
                 if BuildSettings.signInWithApple {

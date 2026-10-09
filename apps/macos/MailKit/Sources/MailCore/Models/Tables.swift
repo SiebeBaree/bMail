@@ -210,8 +210,9 @@ public struct MessageEvent: Hashable, Identifiable, Sendable {
         self.occurredAt = occurredAt
     }
 
-    /// Opens and clicks by machines are shown but never counted.
-    public var countsAsPerson: Bool { source == nil || source == .person }
+    /// Whether a person did this. Gmail's proxy only loads images when someone opens the mail, so it counts; Apple's
+    /// proxy and security scanners fetch on delivery and are shown but never counted.
+    public var isReader: Bool { source == nil || source == .person || source == .googleProxy }
 }
 
 /// A mutation waiting for its provider, in the order they were made.

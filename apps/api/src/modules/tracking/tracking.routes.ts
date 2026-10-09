@@ -15,7 +15,7 @@ export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
         const messageId = app.trackingTokens.verify("open", request.params.token);
         const [message] = messageId ? await app.db.select().from(messages).where(eq(messages.id, messageId)) : [];
         if (message?.trackingEnabled) {
-            const client = classifyClient(request, "open", message.sentAt);
+            const client = classifyClient(request, message.sentAt);
             await app.db.insert(events).values({
                 userId: message.userId,
                 messageId: message.id,
@@ -42,7 +42,7 @@ export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
             : [];
         if (!row) throw new NotFoundError("This link doesn't exist.");
 
-        const client = classifyClient(request, "click", row.message.sentAt);
+        const client = classifyClient(request, row.message.sentAt);
         await app.db.insert(events).values({
             userId: row.message.userId,
             messageId: row.message.id,

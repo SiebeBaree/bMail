@@ -23,6 +23,9 @@ struct RootView: View {
         .tint(.accent)
         .onAppear { model.openSettings = { openSettings() } }
         .onChange(of: scenePhase) { _, phase in if phase == .active { model.syncNow() } }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeOcclusionStateNotification)) { _ in
+            model.setVisible(NSApp.occlusionState.contains(.visible))
+        }
         .onChange(of: model.syncStatus.notice) { _, notice in
             guard let notice else { return }
             model.toasts.show(Toast(notice))

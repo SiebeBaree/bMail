@@ -50,9 +50,8 @@ struct MessageView: View {
     }
 
     private var recipients: String {
-        let names = (message.to + message.cc).map { address in
-            model.accounts.contains { $0.address.caseInsensitiveCompare(address.email) == .orderedSame } ? "you" : address.displayName
-        }
+        let own = Set(model.accounts.map { $0.address.lowercased() })
+        let names = (message.to + message.cc).map { own.contains($0.email.lowercased()) ? "you" : $0.displayName }
         return "to " + ListFormatter.localizedString(byJoining: names)
     }
 }

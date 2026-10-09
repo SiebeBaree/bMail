@@ -38,7 +38,8 @@ public struct ChangeSet: Sendable {
 
     public var isEmpty: Bool {
         accounts.isEmpty && removedAccountIDs.isEmpty && domains.isEmpty && removedDomainIDs.isEmpty
-            && conversations.isEmpty && removedConversationIDs.isEmpty && messages.isEmpty && events.isEmpty
+            && conversations.isEmpty && removedConversationIDs.isEmpty && messages.isEmpty && removedMessageIDs.isEmpty
+            && events.isEmpty
     }
 }
 

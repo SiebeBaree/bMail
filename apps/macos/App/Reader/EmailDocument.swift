@@ -13,7 +13,7 @@ enum EmailDocument {
     }
 
     static func render(_ message: Message, dark: Bool) -> Rendered {
-        let body = message.html ?? textAsHTML(message.text ?? "")
+        let body = message.html.map(withoutDarkMode) ?? textAsHTML(message.text ?? "")
         let designed = message.html.map(isDesigned) ?? false
         let html = """
             <!doctype html>
@@ -23,14 +23,24 @@ enum EmailDocument {
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src * data: cid:; style-src 'unsafe-inline' *; font-src * data: mail-asset:; media-src *">
             <meta name="color-scheme" content="\(designed || !dark ? "light" : "dark")">
             <style>
-            /* The web view is as tall as its content and the thread scrolls around it, so it never shows bars of its own. */
+            /* The web view is as tall as its content and the thread scrolls around it, so it never shows bars of its own.
+               A page sized to the view (html, body { height: 100% }, common in newsletters) grows with it and the view
+               with the page, forever. :root outranks the mail's own selectors. */
             ::-webkit-scrollbar { display: none; }
+            :root, :root > body { height: auto !important; min-height: 0 !important; }
             \(designed ? designedStyle : plainStyle(dark: dark))</style>
             </head>
             <body>\(body)</body>
             </html>
             """
         return Rendered(html: html, isDesigned: designed)
+    }
+
+    /// Turns off a mail's own dark mode styles. They expect a client that also darkens everything they don't style, and
+    /// the reader never does: in a dark app they paint light text onto the white surface designed mail sits on. An
+    /// unknown value makes the media query false.
+    static func withoutDarkMode(_ html: String) -> String {
+        html.replacingOccurrences(of: #"prefers-color-scheme\s*:\s*dark"#, with: "prefers-color-scheme: never", options: [.regularExpression, .caseInsensitive])
     }
 
     /// Own backgrounds or a fixed-width table layout mean someone designed this and expects it shown as is.
@@ -65,7 +75,9 @@ enum EmailDocument {
             """
     }
 
+    /// Light no matter what the mail declares, so system colors (text without a color of its own) stay dark on white.
     private static let designedStyle = """
+        :root { color-scheme: only light !important; }
         html { background: #ffffff; }
         body { margin: 0; padding: 20px; background: #ffffff; color: #111111; font: 14px/1.5 -apple-system, sans-serif; }
         img { max-width: 100%; height: auto; }

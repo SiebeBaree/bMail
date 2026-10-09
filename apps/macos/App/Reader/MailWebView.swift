@@ -11,10 +11,10 @@ struct MailWebView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
     @State private var page: WebPage?
+    @State private var isDesigned = false
     @State private var height: CGFloat = 40
 
     var body: some View {
-        let rendered = EmailDocument.render(message, dark: colorScheme == .dark)
         Group {
             if let page {
                 WebView(page)
@@ -23,18 +23,44 @@ struct MailWebView: View {
                         height = max(newHeight, 20)
                     }
                     .frame(height: height)
+                    .overlay(ScrollPassthrough())
             } else {
                 Color.clear.frame(height: height)
             }
         }
-        .padding(rendered.isDesigned ? 0 : 0)
-        .background(rendered.isDesigned ? Color.white : Color.clear, in: .rect(cornerRadius: Metrics.popoverRadius))
-        .clipShape(.rect(cornerRadius: rendered.isDesigned ? Metrics.popoverRadius : 0))
-        .task(id: rendered.html) {
-            let page = await WebPageFactory.make(model: model)
-            self.page = page
+        .background(isDesigned ? Color.white : Color.clear, in: .rect(cornerRadius: Metrics.popoverRadius))
+        .clipShape(.rect(cornerRadius: isDesigned ? Metrics.popoverRadius : 0))
+        // Rendering scans the whole body, so it runs when the body or the appearance changes, not on every redraw.
+        .task(id: Source(html: message.html, text: message.text, dark: colorScheme == .dark)) {
+            let rendered = EmailDocument.render(message, dark: colorScheme == .dark)
+            isDesigned = rendered.isDesigned
+            if page == nil { page = await WebPageFactory.make(model: model) }
             // The load starts right away; its navigation events don't matter here.
-            _ = page.load(html: rendered.html, baseURL: WebPageFactory.baseURL)
+            _ = page?.load(html: rendered.html, baseURL: WebPageFactory.baseURL)
+        }
+    }
+
+    private struct Source: Equatable {
+        var html: String?
+        var text: String?
+        var dark: Bool
+    }
+}
+
+/// The web view is as tall as its content, yet it still swallows the scroll wheel, so a thread wouldn't scroll while the
+/// pointer is over a message. This layer takes only scroll events and hands them to the thread's scroll view. Clicks,
+/// selection and links fall through to the page.
+private struct ScrollPassthrough: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { View() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class View: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            NSApp.currentEvent?.type == .scrollWheel ? super.hitTest(point) : nil
+        }
+
+        override func scrollWheel(with event: NSEvent) {
+            (enclosingScrollView ?? nextResponder)?.scrollWheel(with: event)
         }
     }
 }
@@ -43,10 +69,12 @@ struct MailWebView: View {
 enum WebPageFactory {
     static let baseURL = URL(string: "mail-asset://message/")!
     private static var rules: WKContentRuleList?
+    /// One store for every message, so WebKit can reuse its web content processes instead of starting fresh each time.
+    private static let dataStore = WKWebsiteDataStore.nonPersistent()
 
     static func make(model: AppModel) async -> WebPage {
         var configuration = WebPage.Configuration()
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = dataStore
         configuration.defaultNavigationPreferences.allowsContentJavaScript = false
         if let scheme = URLScheme("mail-asset") { configuration.urlSchemeHandlers[scheme] = AssetSchemeHandler() }
         if let rules = await trackerRules() { configuration.userContentController.add(rules) }

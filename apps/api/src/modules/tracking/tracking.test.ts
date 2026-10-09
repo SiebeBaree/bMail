@@ -39,10 +39,13 @@ beforeEach(async () => {
 const sentHtml = () => harness.resend.sent[0]?.email.html ?? "";
 const pixelPath = () => new URL(/<img src="([^"]+)"/.exec(sentHtml())?.[1] ?? "").pathname;
 const clickPath = () => new URL(/href="([^"]+\/c\/[^"]+)"/.exec(sentHtml())?.[1] ?? "").pathname;
+const aMinuteLater = () => vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ["Date"] });
 const userAgents = {
     mac: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_0) AppleWebKit/605.1.15 (KHTML, like Gecko)",
     appleProxy: "Mozilla/5.0",
     gmail: "Mozilla/5.0 (Windows NT 5.1; rv:11.0) Gecko Firefox/11.0 (via ggpht.com GoogleImageProxy)",
+    windowsChrome:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
 };
 
 async function events() {
@@ -55,6 +58,7 @@ async function events() {
 
 describe("GET /o/:token", () => {
     it("records an open by a person with their device and location", async () => {
+        aMinuteLater();
         const response = await harness.app.inject({
             method: "GET",
             url: pixelPath(),
@@ -75,9 +79,19 @@ describe("GET /o/:token", () => {
     });
 
     it("tells Apple's privacy proxy and Google's image proxy apart from people", async () => {
+        aMinuteLater();
         await harness.app.inject({ method: "GET", url: pixelPath(), headers: { "user-agent": userAgents.appleProxy } });
         await harness.app.inject({ method: "GET", url: pixelPath(), headers: { "user-agent": userAgents.gmail } });
         expect((await events()).map((event) => event.source)).toEqual(["apple_proxy", "google_proxy"]);
+    });
+
+    it("counts an open seconds after sending as a scanner, whatever the user agent", async () => {
+        await harness.app.inject({
+            method: "GET",
+            url: pixelPath(),
+            headers: { "user-agent": userAgents.windowsChrome },
+        });
+        expect((await events())[0]?.source).toBe("scanner");
     });
 
     it("still answers with the pixel for a forged token, and records nothing", async () => {
@@ -91,7 +105,7 @@ describe("GET /o/:token", () => {
 
 describe("GET /c/:token", () => {
     it("redirects to the original link and records the click", async () => {
-        vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ["Date"] });
+        aMinuteLater();
         const response = await harness.app.inject({
             method: "GET",
             url: clickPath(),

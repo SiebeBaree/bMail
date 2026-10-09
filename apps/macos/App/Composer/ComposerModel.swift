@@ -50,6 +50,7 @@ final class ComposerModel {
 
     private init(app: AppModel, mode: Mode, conversationID: Conversation.ID, messageID: Message.ID = UUID()) {
         self.app = app
+        self.accounts = app.accounts
         self.mode = mode
         self.conversationID = conversationID
         self.messageID = messageID
@@ -58,7 +59,8 @@ final class ComposerModel {
     /// New mail and forwards take the reader's place; replies open under the conversation they answer.
     var replacesReader: Bool { mode == .new || mode == .forward }
 
-    var accounts: [Account] { app?.accounts ?? [] }
+    /// Read once when the composer opens: the app's list is a database read on every access.
+    let accounts: [Account]
     var account: Account? { accounts.first { $0.id == accountID } }
 
     /// Tracking runs through the api, so it exists for your own domains only.
@@ -76,7 +78,7 @@ final class ComposerModel {
 
     static func new(app: AppModel, mailto: URL? = nil) -> ComposerModel {
         let model = ComposerModel(app: app, mode: .new, conversationID: UUID())
-        model.accountID = app.accountFilter ?? app.accounts.first?.id
+        model.accountID = app.accountFilter ?? model.accounts.first?.id
         if let mailto, let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false) {
             model.to = components.path.split(separator: ",").map { Address(email: String($0)) }
             model.subject = components.queryItems?.first { $0.name.lowercased() == "subject" }?.value ?? ""
@@ -91,7 +93,7 @@ final class ComposerModel {
         guard let thread, let last = thread.last else { return nil }
         let model = ComposerModel(app: app, mode: mode, conversationID: mode == .forward ? UUID() : conversationID)
         model.accountID = last.accountID
-        let own = Set(app.accounts.map { $0.address.lowercased() })
+        let own = Set(model.accounts.map { $0.address.lowercased() })
         let isOwn = { (address: Address) in own.contains(address.email.lowercased()) }
 
         switch mode {

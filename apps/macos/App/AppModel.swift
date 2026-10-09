@@ -159,6 +159,11 @@ final class AppModel {
         engine.wake()
     }
 
+    /// Whether any window is on screen. Hidden, the app polls every few minutes instead of every few seconds.
+    func setVisible(_ visible: Bool) {
+        Task { [engine] in await engine.setVisible(visible) }
+    }
+
     // MARK: - Commands
 
     /// Runs a command. Returns false when it doesn't apply right now, so the key falls through to the focused view.

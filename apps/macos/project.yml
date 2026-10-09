@@ -38,7 +38,7 @@ targets:
         product: Providers
     settings:
       base:
-        PRODUCT_NAME: Baree Mail
+        PRODUCT_NAME: bMail
         PRODUCT_MODULE_NAME: MailApp
         PRODUCT_BUNDLE_IDENTIFIER: be.baree.mail
         CODE_SIGN_STYLE: Automatic
@@ -46,7 +46,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: App/Resources/Mail.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Baree Mail
+        INFOPLIST_KEY_CFBundleDisplayName: bMail
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Siebe Baree"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
