@@ -23,10 +23,11 @@ import { authModule } from "./modules/auth";
 import { conversationsRoutes } from "./modules/conversations";
 import { domainsRoutes } from "./modules/domains";
 import { healthModule } from "./modules/health";
+import { labelsRoutes } from "./modules/labels";
 import { mailboxesRoutes } from "./modules/mailboxes";
 import { messagesRoutes } from "./modules/messages";
 import { syncRoutes } from "./modules/sync";
-import { trackingRoutes } from "./modules/tracking";
+import { trackedMessagesRoutes, trackingRoutes } from "./modules/tracking";
 import { webhooksModule } from "./modules/webhooks";
 import { authenticate } from "./plugins/authenticate";
 import { observabilityPlugin } from "./plugins/observability";
@@ -77,7 +78,7 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
     app.decorateRequest("userId", "");
 
     // The document the Swift client is generated from. 3.0 rather than 3.1: swift-openapi-generator reads nullable
-    // fields best in that dialect. Routes marked `hide` (auth, webhooks, tracking) aren't part of it.
+    // fields best in that dialect. Routes marked `hide` (auth, webhooks, opens and clicks) aren't part of it.
     await app.register(swagger, {
         openapi: {
             openapi: "3.0.3",
@@ -134,6 +135,8 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
         await scope.register(mailboxesRoutes);
         await scope.register(conversationsRoutes);
         await scope.register(messagesRoutes);
+        await scope.register(trackedMessagesRoutes);
+        await scope.register(labelsRoutes);
     });
 
     return app;

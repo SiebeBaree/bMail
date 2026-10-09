@@ -15,6 +15,13 @@
       "when": 1791442849169,
       "tag": "0001_sync_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791548381536,
+      "tag": "0002_labels_tracked_unsubscribe",
+      "breakpoints": true
     }
   ]
 }

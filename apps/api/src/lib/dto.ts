@@ -1,5 +1,14 @@
-import type { Conversation, Domain, Mailbox, Message, MessageEvent } from "@repo/contracts";
-import type { AttachmentRow, ConversationRow, DomainRow, EventRow, MailboxRow, MessageRow } from "@repo/db";
+import type { Conversation, ConversationLabels, Domain, Label, Mailbox, Message, MessageEvent } from "@repo/contracts";
+import type {
+    AttachmentRow,
+    ConversationLabelsRow,
+    ConversationRow,
+    DomainRow,
+    EventRow,
+    LabelRow,
+    MailboxRow,
+    MessageRow,
+} from "@repo/db";
 
 // Row to wire format, in one place, because sync returns every kind of row and each module returns its own.
 // Dates become ISO strings here and nowhere else.
@@ -80,6 +89,8 @@ export function toMessage(
             contentId: file.contentId,
         })),
         links,
+        listUnsubscribe: row.listUnsubscribe,
+        listUnsubscribeOneClick: row.listUnsubscribePost?.toLowerCase() === "list-unsubscribe=one-click",
     };
 }
 
@@ -96,6 +107,19 @@ export function toEvent(row: EventRow, url: string | null): MessageEvent {
         detail: row.detail,
         occurredAt: iso(row.occurredAt),
     };
+}
+
+export function toLabel(row: LabelRow): Label {
+    return {
+        id: row.id,
+        name: row.name,
+        createdAt: iso(row.createdAt),
+        deletedAt: isoOrNull(row.deletedAt),
+    };
+}
+
+export function toConversationLabels(row: ConversationLabelsRow): ConversationLabels {
+    return { conversationId: row.conversationId, labelIds: row.labelIds };
 }
 
 /** Every domain gets `t.<domain>` for tracking, a CNAME to the api, so links match the sender's domain. */

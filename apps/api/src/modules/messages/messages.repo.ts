@@ -1,4 +1,4 @@
-import type { Message } from "@repo/contracts";
+import type { Message, TrackedMessage } from "@repo/contracts";
 import {
     attachments,
     conversations,
@@ -9,6 +9,7 @@ import {
     type ConversationRow,
     type Database,
     type MessageRow,
+    type TrackedMessageRow,
     type Transaction,
 } from "@repo/db";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -73,6 +74,24 @@ export function messagesRepo(db: Database | Transaction) {
                     trackedLinks.filter((link) => link.messageId === row.id).map(({ id, url }) => ({ id, url })),
                 ),
             );
+        },
+        /** Gmail and Outlook messages the api tracks, in wire format with their links. */
+        async wireTrackedMessages(rows: TrackedMessageRow[]): Promise<TrackedMessage[]> {
+            if (rows.length === 0) return [];
+            const trackedLinks = await db
+                .select()
+                .from(links)
+                .where(
+                    inArray(
+                        links.messageId,
+                        rows.map((row) => row.id),
+                    ),
+                )
+                .orderBy(asc(links.position));
+            return rows.map((row) => ({
+                id: row.id,
+                links: trackedLinks.filter((link) => link.messageId === row.id).map(({ id, url }) => ({ id, url })),
+            }));
         },
         async recordEvent(values: typeof events.$inferInsert): Promise<void> {
             await db.insert(events).values(values);

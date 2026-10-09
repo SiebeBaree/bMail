@@ -68,6 +68,22 @@ describe("email.received", () => {
         expect(messages.map((message) => message.conversationId)).toEqual([conversation?.id, conversation?.id]);
     });
 
+    it("keeps the List-Unsubscribe header and whether it supports one-click", async () => {
+        harness.resend.deliver({
+            id: "in_1",
+            headers: {
+                "List-Unsubscribe": "<https://news.example/u/1>, <mailto:unsubscribe@news.example>",
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+        });
+        await harness.webhook(received("in_1"));
+
+        expect((await sync()).messages[0]).toMatchObject({
+            listUnsubscribe: "<https://news.example/u/1>, <mailto:unsubscribe@news.example>",
+            listUnsubscribeOneClick: true,
+        });
+    });
+
     it("sends mail for an address without a mailbox to the catch-all", async () => {
         harness.resend.deliver({ id: "in_1", to: ["Whoever <random@baree.test>"] });
         await harness.webhook(received("in_1"));

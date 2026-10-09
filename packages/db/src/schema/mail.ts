@@ -17,6 +17,7 @@ import {
     jsonb,
     pgEnum,
     pgTable,
+    primaryKey,
     text,
     timestamp,
     unique,
@@ -150,6 +151,9 @@ export const messages = pgTable(
         resendEmailId: text(),
         trackingEnabled: boolean().notNull().default(false),
         rawStorageKey: text(),
+        /** The raw List-Unsubscribe and List-Unsubscribe-Post headers. Only inbound mail has them. */
+        listUnsubscribe: text(),
+        listUnsubscribePost: text(),
     },
     (table) => [
         unique().on(table.mailboxId, table.resendEmailId),
@@ -178,14 +182,27 @@ export const attachments = pgTable(
     (table) => [index().on(table.messageId)],
 );
 
+/**
+ * Mail the app sent from Gmail or Outlook with tracking on. The id is the app's id for that message; its links and
+ * events point here instead of at `messages`.
+ */
+export const trackedMessages = pgTable(
+    "tracked_messages",
+    {
+        id: uuid().primaryKey(),
+        ...synced,
+        sentAt: timestamp({ withTimezone: true }).notNull(),
+    },
+    (table) => [index().on(table.userId, table.seq)],
+);
+
 /** The original destination of every link in a tracked message. A click token points at a row here. */
 export const links = pgTable(
     "links",
     {
         id: uuid().primaryKey().defaultRandom(),
-        messageId: uuid()
-            .notNull()
-            .references(() => messages.id, { onDelete: "cascade" }),
+        /** A `messages` or a `tracked_messages` row, so there is no foreign key. */
+        messageId: uuid().notNull(),
         /** Order in the html, so re-instrumenting a retried send produces the same links. */
         position: integer().notNull(),
         url: text().notNull(),
@@ -199,9 +216,8 @@ export const events = pgTable(
     {
         id: uuid().primaryKey().defaultRandom(),
         ...synced,
-        messageId: uuid()
-            .notNull()
-            .references(() => messages.id, { onDelete: "cascade" }),
+        /** A `messages` or a `tracked_messages` row, so there is no foreign key. */
+        messageId: uuid().notNull(),
         type: eventType().notNull(),
         linkId: uuid().references(() => links.id, { onDelete: "set null" }),
         /** Opens and clicks only. Location and device are derived on arrival; the raw IP is never stored. */
@@ -213,6 +229,38 @@ export const events = pgTable(
         occurredAt: timestamp({ withTimezone: true }).notNull(),
     },
     (table) => [index().on(table.userId, table.seq), index().on(table.messageId, table.occurredAt)],
+);
+
+/** The app's own labels, shared by every account. */
+export const labels = pgTable(
+    "labels",
+    {
+        id: uuid().primaryKey(),
+        ...synced,
+        name: text().notNull(),
+        deletedAt: timestamp({ withTimezone: true }),
+    },
+    // Partial and case-insensitive, so `Work` and `work` can't both exist but a removed name can be used again.
+    (table) => [
+        uniqueIndex("labels_user_id_name_index")
+            .on(table.userId, sql`lower(${table.name})`)
+            .where(sql`${table.deletedAt} is null`),
+        index().on(table.userId, table.seq),
+    ],
+);
+
+/**
+ * The labels on one conversation, the whole set in one row so setting them is one upsert. Gmail and Outlook
+ * conversations only exist in the app, so the id has no foreign key.
+ */
+export const conversationLabels = pgTable(
+    "conversation_labels",
+    {
+        conversationId: uuid().notNull(),
+        ...synced,
+        labelIds: jsonb().$type<string[]>().notNull().default([]),
+    },
+    (table) => [primaryKey({ columns: [table.userId, table.conversationId] }), index().on(table.userId, table.seq)],
 );
 
 /** Resend retries webhooks with the same svix-id. Inserting here first makes a retry a no-op. */
@@ -227,3 +275,6 @@ export type ConversationRow = typeof conversations.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type TrackedMessageRow = typeof trackedMessages.$inferSelect;
+export type LabelRow = typeof labels.$inferSelect;
+export type ConversationLabelsRow = typeof conversationLabels.$inferSelect;

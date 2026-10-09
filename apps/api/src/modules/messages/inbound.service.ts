@@ -179,6 +179,8 @@ export function inboundService({ db, resend, storage, log }: Dependencies) {
                         sentAt: receivedAt,
                         resendEmailId: email.id,
                         rawStorageKey: rawKey,
+                        listUnsubscribe: header("list-unsubscribe"),
+                        listUnsubscribePost: header("list-unsubscribe-post"),
                     });
                     if (files.length > 0) {
                         await tx

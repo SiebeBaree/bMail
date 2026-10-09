@@ -3,8 +3,10 @@ import { z } from "zod";
 import { conversationSchema } from "./conversations";
 import { domainSchema } from "./domains";
 import { messageEventSchema } from "./events";
+import { conversationLabelsSchema, labelSchema } from "./labels";
 import { mailboxSchema } from "./mailboxes";
 import { messageSchema } from "./messages";
+import { trackedMessageSchema } from "./tracking";
 
 export const syncQuerySchema = z.object({
     cursor: z.coerce.number().int().min(0).default(0),
@@ -24,6 +26,9 @@ export const syncResponseSchema = z
         conversations: z.array(conversationSchema),
         messages: z.array(messageSchema),
         events: z.array(messageEventSchema),
+        trackedMessages: z.array(trackedMessageSchema),
+        labels: z.array(labelSchema),
+        conversationLabels: z.array(conversationLabelsSchema),
     })
     .meta({ id: "SyncResponse" });
 

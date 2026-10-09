@@ -1,9 +1,21 @@
 import type { SyncResponse } from "@repo/contracts";
-import { conversations, domains, events, links, mailboxes, messages, syncState, type Database } from "@repo/db";
+import {
+    conversationLabels,
+    conversations,
+    domains,
+    events,
+    labels,
+    links,
+    mailboxes,
+    messages,
+    syncState,
+    trackedMessages,
+    type Database,
+} from "@repo/db";
 import { and, asc, eq, gt, inArray, lte } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
-import { toConversation, toDomain, toEvent, toMailbox } from "../../lib/dto";
+import { toConversation, toConversationLabels, toDomain, toEvent, toLabel, toMailbox } from "../../lib/dto";
 import { messagesRepo } from "../messages/messages.repo";
 
 type Synced = { userId: AnyPgColumn; seq: AnyPgColumn };
@@ -30,7 +42,8 @@ export function syncService(db: Database) {
      * Every change moves a row to a new seq, so a message can come up pages before its conversation, which was starred
      * since. The app's cache won't hold a row whose parent it hasn't seen, so parents past the ceiling ride along in
      * their current state. Parents at or below it are already in the app or on this page. The ones that ride along
-     * come again on their own page later, which is harmless: the app upserts.
+     * come again on their own page later, which is harmless: the app upserts. Events of tracked Gmail and Outlook
+     * mail have no parent here, the app has that message itself.
      */
     async function withParents(page: Page, ceiling: number) {
         const messageIds = missing(
@@ -92,7 +105,7 @@ export function syncService(db: Database) {
          *
          * `head` is read first: writers bump the user's counter under a row lock held until commit, so every row at or
          * below head is committed and nothing later can land below it. Reading up to head gives one consistent cut
-         * across five queries. When a kind fills its limit the cut moves down to the lowest of those last rows, so a
+         * across every query. When a kind fills its limit the cut moves down to the lowest of those last rows, so a
          * page never skips past rows another kind hasn't returned yet.
          */
         async changes(userId: string, cursor: number, limit: number): Promise<SyncResponse> {
@@ -101,7 +114,16 @@ export function syncService(db: Database) {
             const window = (table: Synced) =>
                 and(eq(table.userId, userId), gt(table.seq, cursor), lte(table.seq, head));
 
-            const [domainRows, mailboxRows, conversationRows, messageRows, eventRows] = await Promise.all([
+            const [
+                domainRows,
+                mailboxRows,
+                conversationRows,
+                messageRows,
+                eventRows,
+                trackedMessageRows,
+                labelRows,
+                conversationLabelRows,
+            ] = await Promise.all([
                 db.select().from(domains).where(window(domains)).orderBy(asc(domains.seq)).limit(limit),
                 db
                     .select({ mailbox: mailboxes, domainName: domains.name })
@@ -124,6 +146,19 @@ export function syncService(db: Database) {
                     .where(window(events))
                     .orderBy(asc(events.seq))
                     .limit(limit),
+                db
+                    .select()
+                    .from(trackedMessages)
+                    .where(window(trackedMessages))
+                    .orderBy(asc(trackedMessages.seq))
+                    .limit(limit),
+                db.select().from(labels).where(window(labels)).orderBy(asc(labels.seq)).limit(limit),
+                db
+                    .select()
+                    .from(conversationLabels)
+                    .where(window(conversationLabels))
+                    .orderBy(asc(conversationLabels.seq))
+                    .limit(limit),
             ]);
 
             const pages = [
@@ -132,6 +167,9 @@ export function syncService(db: Database) {
                 conversationRows.map((row) => row.seq),
                 messageRows.map((row) => row.seq),
                 eventRows.map((row) => row.event.seq),
+                trackedMessageRows.map((row) => row.seq),
+                labelRows.map((row) => row.seq),
+                conversationLabelRows.map((row) => row.seq),
             ];
             const fullPages = pages.filter((seqs) => seqs.length === limit);
             let ceiling = fullPages.length > 0 ? Math.min(...fullPages.map((seqs) => seqs.at(-1) ?? head)) : head;
@@ -154,6 +192,9 @@ export function syncService(db: Database) {
                 conversations: upToCeiling(conversationRows, (row) => row.seq),
                 messages: upToCeiling(messageRows, (row) => row.seq),
                 events: upToCeiling(eventRows, (row) => row.event.seq),
+                trackedMessages: upToCeiling(trackedMessageRows, (row) => row.seq),
+                labels: upToCeiling(labelRows, (row) => row.seq),
+                conversationLabels: upToCeiling(conversationLabelRows, (row) => row.seq),
             };
             await withParents(page, ceiling);
 
@@ -165,6 +206,9 @@ export function syncService(db: Database) {
                 conversations: page.conversations.map(toConversation),
                 messages: await messagesRepo(db).wireMessages(page.messages),
                 events: page.events.map((row) => toEvent(row.event, row.url)),
+                trackedMessages: await messagesRepo(db).wireTrackedMessages(page.trackedMessages),
+                labels: page.labels.map(toLabel),
+                conversationLabels: page.conversationLabels.map(toConversationLabels),
             };
         },
     };

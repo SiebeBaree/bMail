@@ -1,6 +1,6 @@
 import { trackingTokenParamSchema } from "@repo/contracts";
-import { events, links, messages } from "@repo/db";
-import { eq } from "drizzle-orm";
+import { events, links, messages, trackedMessages, type Database } from "@repo/db";
+import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 
 import { NotFoundError } from "../../lib/errors";
@@ -13,8 +13,8 @@ const PIXEL = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBR
 export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
     app.get("/o/:token", { schema: { hide: true, params: trackingTokenParamSchema } }, async (request, reply) => {
         const messageId = app.trackingTokens.verify("open", request.params.token);
-        const [message] = messageId ? await app.db.select().from(messages).where(eq(messages.id, messageId)) : [];
-        if (message?.trackingEnabled) {
+        const message = messageId ? await trackedMessage(app.db, messageId) : null;
+        if (message) {
             const client = classifyClient(request, message.sentAt);
             await app.db.insert(events).values({
                 userId: message.userId,
@@ -33,24 +33,34 @@ export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
 
     app.get("/c/:token", { schema: { hide: true, params: trackingTokenParamSchema } }, async (request, reply) => {
         const linkId = app.trackingTokens.verify("click", request.params.token);
-        const [row] = linkId
-            ? await app.db
-                  .select({ link: links, message: messages })
-                  .from(links)
-                  .innerJoin(messages, eq(messages.id, links.messageId))
-                  .where(eq(links.id, linkId))
-            : [];
-        if (!row) throw new NotFoundError("This link doesn't exist.");
+        const [link] = linkId ? await app.db.select().from(links).where(eq(links.id, linkId)) : [];
+        const message = link ? await trackedMessage(app.db, link.messageId) : null;
+        if (!link || !message) throw new NotFoundError("This link doesn't exist.");
 
-        const client = classifyClient(request, row.message.sentAt);
+        const client = classifyClient(request, message.sentAt);
         await app.db.insert(events).values({
-            userId: row.message.userId,
-            messageId: row.message.id,
+            userId: message.userId,
+            messageId: message.id,
             type: "clicked",
-            linkId: row.link.id,
+            linkId: link.id,
             ...client,
             occurredAt: new Date(),
         });
-        return reply.header("cache-control", "no-store").redirect(row.link.url, 302);
+        return reply.header("cache-control", "no-store").redirect(link.url, 302);
     });
 };
+
+/** Mail sent through the api with tracking on, or Gmail and Outlook mail the app had instrumented. */
+async function trackedMessage(db: Database, id: string) {
+    const [row] = await db
+        .select({ id: messages.id, userId: messages.userId, sentAt: messages.sentAt })
+        .from(messages)
+        .where(and(eq(messages.id, id), eq(messages.trackingEnabled, true)))
+        .unionAll(
+            db
+                .select({ id: trackedMessages.id, userId: trackedMessages.userId, sentAt: trackedMessages.sentAt })
+                .from(trackedMessages)
+                .where(eq(trackedMessages.id, id)),
+        );
+    return row ?? null;
+}

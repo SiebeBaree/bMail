@@ -43,6 +43,10 @@ export const messageSchema = z
         trackingEnabled: z.boolean(),
         attachments: z.array(attachmentSchema),
         links: z.array(trackedLinkSchema),
+        /** The List-Unsubscribe header as received: `<https://...>` and `<mailto:...>` entries. */
+        listUnsubscribe: z.string().nullable(),
+        /** RFC 8058: the sender accepts a POST of `List-Unsubscribe=One-Click` to the https url above. */
+        listUnsubscribeOneClick: z.boolean(),
     })
     .meta({ id: "Message" });
 
