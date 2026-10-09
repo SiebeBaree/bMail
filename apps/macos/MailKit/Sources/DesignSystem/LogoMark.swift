@@ -21,7 +21,7 @@ public struct LogoMark: View {
     }
 }
 
-/// The plane on a 100 by 100 grid, shared with the app icon script.
+/// The plane on a 100 by 100 grid. App/Resources/AppIcon.icon draws the same triangles at 1024.
 private struct PlaneShape: Shape {
     struct Triangles {
         let wing: [CGPoint] = [CGPoint(x: 18, y: 50), CGPoint(x: 82, y: 22), CGPoint(x: 60, y: 80)]
