@@ -84,7 +84,7 @@ struct ConversationView: View {
             ActionButton(symbol: thread.conversation?.isStarred == true ? "star.fill" : "star", key: "S", help: "Star") {
                 model.perform(.toggleStar)
             }
-            ActionButton(symbol: "trash", key: "#", help: "Move to trash") { model.perform(.trash) }
+            ActionButton(symbol: "trash", key: "⌘⌫", help: "Move to trash") { model.perform(.trash) }
         }
         .padding(.leading, 32)
         .padding(.trailing, 16)

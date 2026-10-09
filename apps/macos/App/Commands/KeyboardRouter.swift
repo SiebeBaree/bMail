@@ -28,8 +28,9 @@ final class KeyboardRouter {
     private func handle(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .control, .option])
         if event.keyCode == 53 { return perform(.back) }
-        // ⌘A selects conversations, except in a text field, where it selects text.
+        // ⌘A and ⌘⌫ act on conversations, except in a text field, where they select and delete text.
         if modifiers == .command, !isTyping, event.charactersIgnoringModifiers == "a" { return perform(.checkAll) }
+        if modifiers == .command, !isTyping, event.keyCode == 51 { return perform(.trash) }
         // Down and up arrows move through the list like J and K; with Shift, any of them extends the selection.
         let shifted = event.modifierFlags.contains(.shift)
         if modifiers.isEmpty, !isTyping, let arrow = [125: Command.next, 126: .previous][event.keyCode] {

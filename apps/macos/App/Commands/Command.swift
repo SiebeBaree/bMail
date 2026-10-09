@@ -103,7 +103,7 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .previous: ["K"]
         case .back: ["Esc"]
         case .markDone: ["E"]
-        case .trash: ["#"]
+        case .trash: ["⌘⌫"]
         case .spam: ["!"]
         case .toggleStar: ["S"]
         case .toggleRead: ["U"]
@@ -134,7 +134,6 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .next: "j"
         case .previous: "k"
         case .markDone: "e"
-        case .trash: "#"
         case .spam: "!"
         case .toggleStar: "s"
         case .toggleRead: "u"

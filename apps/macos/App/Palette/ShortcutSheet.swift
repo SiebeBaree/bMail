@@ -33,6 +33,8 @@ struct ShortcutSheet: View {
                 }
             }
             .padding(28)
+            // As wide as its columns. The title row's Spacer would otherwise stretch it across the window.
+            .fixedSize()
             .background(Color.raised, in: .rect(cornerRadius: Metrics.windowRadius))
             .overlay(RoundedRectangle(cornerRadius: Metrics.windowRadius).strokeBorder(Color.lineStrong))
             .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
