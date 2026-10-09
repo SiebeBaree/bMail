@@ -203,8 +203,12 @@ public struct GmailProvider: MailProvider {
         // Gmail's copy has the message's id but not the conversation's: a new thread replaces the optimistic one.
         if !changes.messages.contains(where: { $0.id == message.id }) { changes.removedMessageIDs.append(message.id) }
         changes.removedConversationIDs = threadID == nil ? [message.conversationID] : []
-        // Shows as tracked right away; its links follow with the api's next sync.
-        if message.trackingEnabled { changes.trackedSends = [TrackedSend(id: message.id, links: [])] }
+        // Tracked right away; its links follow with the api's sync, which may already have them.
+        if message.trackingEnabled {
+            for index in changes.messages.indices where changes.messages[index].id == message.id {
+                changes.messages[index].trackingEnabled = true
+            }
+        }
         return changes
     }
 

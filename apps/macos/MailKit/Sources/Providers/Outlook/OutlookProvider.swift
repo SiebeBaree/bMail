@@ -249,7 +249,12 @@ public struct OutlookProvider: MailProvider {
         var changes = (try? await pull(conversationOf: created.id)) ?? ChangeSet()
         changes.removedMessageIDs = [message.id]
         if parent == nil { changes.removedConversationIDs = [message.conversationID] }
-        if message.trackingEnabled { changes.trackedSends = [TrackedSend(id: trackedID, links: [])] }
+        // Tracked right away; its links follow with the api's sync, which may already have them.
+        if message.trackingEnabled {
+            for index in changes.messages.indices where changes.messages[index].id == trackedID {
+                changes.messages[index].trackingEnabled = true
+            }
+        }
         return changes
     }
 
