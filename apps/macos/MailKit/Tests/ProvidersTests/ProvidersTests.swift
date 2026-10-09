@@ -1,5 +1,7 @@
 import Foundation
+import HTTPTypes
 import MailCore
+import OpenAPIRuntime
 import Testing
 
 @testable import Providers
@@ -163,5 +165,22 @@ extension GmailMappingTests {
             Issue.record("expected a history cursor")
             return
         }
+    }
+}
+
+/// Answers every request the way the api answers a delete: 204 and no body.
+private struct NoContent: ClientTransport {
+    func send(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String) async throws -> (HTTPResponse, HTTPBody?) {
+        (HTTPResponse(status: .noContent), nil)
+    }
+}
+
+@Suite struct ServerAdminTests {
+    @Test func deletesSucceedOnTheirEmptyAnswer() async throws {
+        let admin = ServerAdmin(connection: ServerConnection(baseURL: URL(string: "https://api.example")!, transport: NoContent()))
+        let id = UUID()
+        #expect(try await admin.deleteLabel(id).removedLabelIDs == [id])
+        #expect(try await admin.removeDomain(id).removedDomainIDs == [id])
+        #expect(try await admin.removeMailbox(id).removedAccountIDs == [id])
     }
 }

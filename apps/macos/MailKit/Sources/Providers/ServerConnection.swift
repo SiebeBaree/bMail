@@ -23,12 +23,17 @@ public final class ServerConnection: Sendable {
         return URLSession(configuration: configuration)
     }()
 
-    public init(baseURL: URL) {
+    public convenience init(baseURL: URL) {
+        self.init(baseURL: baseURL, transport: URLSessionTransport(configuration: .init(session: Self.session)))
+    }
+
+    /// Tests pass a transport that answers like the api does, to check the generated client against real responses.
+    init(baseURL: URL, transport: any ClientTransport) {
         self.baseURL = baseURL
         self.client = Client(
             serverURL: baseURL,
             configuration: Configuration(dateTranscoder: .iso8601WithFractionalSeconds),
-            transport: URLSessionTransport(configuration: .init(session: Self.session)),
+            transport: transport,
             middlewares: [BearerMiddleware()]
         )
     }

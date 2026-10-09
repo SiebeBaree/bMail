@@ -1313,18 +1313,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Default Response"
           },
           "404": {
             "description": "Default Response",
@@ -1519,18 +1508,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Default Response"
           },
           "404": {
             "description": "Default Response",
@@ -1925,18 +1903,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "string",
-                  "nullable": true,
-                  "enum": [
-                    null
-                  ]
-                }
-              }
-            }
+            "description": "Default Response"
           },
           "404": {
             "description": "Default Response",

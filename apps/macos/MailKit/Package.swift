@@ -48,7 +48,15 @@ let package = Package(
             ]
         ),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
-        .testTarget(name: "ProvidersTests", dependencies: ["Providers", "MailCore"]),
+        .testTarget(
+            name: "ProvidersTests",
+            dependencies: [
+                "Providers",
+                "MailCore",
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+                .product(name: "HTTPTypes", package: "swift-http-types"),
+            ]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

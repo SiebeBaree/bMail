@@ -26,11 +26,18 @@ const app = await buildApp({
     publicUrl: "http://localhost",
 });
 await app.ready();
-// zod marks every object closed, and swift-openapi-generator turns that into decoders that reject unknown keys. A
-// response that gains a field would then break every app build already installed, so objects stay open.
+// Two fixes for the generated Swift client:
+// - zod marks every object closed, and swift-openapi-generator turns that into decoders that reject unknown keys. A
+//   response that gains a field would then break every app build already installed, so objects stay open.
+// - `204: z.null()` documents a JSON body, which the client then tries to decode from the empty response and fails
+//   after the server already did the work. A 204 has no body.
 const spec = JSON.stringify(
     withoutUnusedSchemas(app.swagger()),
-    (key, value: unknown) => (key === "additionalProperties" && value === false ? undefined : value),
+    (key, value: unknown) => {
+        if (key === "additionalProperties" && value === false) return undefined;
+        if (key === "204" && typeof value === "object" && value !== null) return { ...value, content: undefined };
+        return value;
+    },
     2,
 );
 await writeFile(output, `${spec}\n`);
