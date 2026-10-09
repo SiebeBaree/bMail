@@ -163,19 +163,20 @@ private struct AssetSchemeHandler: URLSchemeHandler {
     }
 }
 
-/// The first load is the document itself; every later navigation is a click, which opens in the browser. A click on
-/// one of our tracked links opens the original destination directly, so you never count as a click on your own mail.
+/// The document and its anchors load in place. Only a click leaves it, opening in the browser or the composer; a
+/// navigation the mail starts on its own, like a meta refresh, is dropped. A click on one of our tracked links opens
+/// the original destination directly, so you never count as a click on your own mail.
 private struct LinkDecider: WebPage.NavigationDeciding {
     let model: AppModel
 
     func decidePolicy(for action: WebPage.NavigationAction, preferences: inout WebPage.NavigationPreferences) async -> WKNavigationActionPolicy {
-        guard let url = action.request.url, url.scheme == "http" || url.scheme == "https" || url.scheme == "mailto" else {
-            return .allow
-        }
-        if url.scheme == "mailto" {
-            model.composer = ComposerModel.new(app: model, mailto: url)
-        } else {
-            NSWorkspace.shared.open(model.store.trackedLinkDestination(for: url) ?? url)
+        guard let url = action.request.url else { return .cancel }
+        if url.scheme == WebPageFactory.baseURL.scheme { return .allow }
+        guard action.navigationType == .linkActivated else { return .cancel }
+        switch url.scheme {
+        case "mailto": model.composer = ComposerModel.new(app: model, mailto: url)
+        case "http", "https": NSWorkspace.shared.open(model.store.trackedLinkDestination(for: url) ?? url)
+        default: break
         }
         return .cancel
     }

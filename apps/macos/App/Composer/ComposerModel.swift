@@ -252,22 +252,22 @@ extension String {
 }
 
 extension OutgoingMessage {
-    /// The message a `mailto:` unsubscribe link asks for, from the account the list mails. Nil for a link without an
-    /// address.
+    /// The message a `mailto:` unsubscribe link asks for, from the account the list mails. Nil unless the link names
+    /// exactly one address. It goes out without a composer, so the sender only picks that address and the subject;
+    /// a body of theirs would be mail you never saw sent in your name.
     init?(unsubscribing mailto: URL, from account: Account) {
-        guard let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false), components.path.contains("@") else {
+        guard let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false), components.path.isPlausibleEmail else {
             return nil
         }
-        let field = { (name: String) in components.queryItems?.first { $0.name.lowercased() == name }?.value }
-        let text = field("body") ?? "unsubscribe"
+        let subject = components.queryItems?.first { $0.name.lowercased() == "subject" }?.value
         self.init(
             conversationID: UUID(),
             accountID: account.id,
             from: Address(name: account.displayName, email: account.address),
             to: [Address(email: components.path)],
-            subject: field("subject") ?? "unsubscribe",
-            html: EmailDocument.textAsHTML(text),
-            text: text
+            subject: subject ?? "unsubscribe",
+            html: EmailDocument.textAsHTML("unsubscribe"),
+            text: "unsubscribe"
         )
     }
 }

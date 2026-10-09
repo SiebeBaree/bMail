@@ -47,6 +47,12 @@ import Testing
         #expect(try render(subject: "Offerte voor Q4 ✓").contains("Subject: =?UTF-8?B?\(Data("Offerte voor Q4 ✓".utf8).base64EncodedString())?="))
     }
 
+    @Test func lineBreaksCantAddHeaders() throws {
+        let raw = try render(subject: "Invoice\r\nBcc: x@evil.example\nReply-To: pay@evil.example")
+        #expect(raw.contains("Subject: InvoiceBcc: x@evil.exampleReply-To: pay@evil.example\r\n"))
+        #expect(!raw.contains("\r\nReply-To:"))
+    }
+
     @Test func wrapsAttachmentsInMultipartMixed() throws {
         let file = FileManager.default.temporaryDirectory.appending(path: "proposal-\(UUID()).pdf")
         try Data("%PDF".utf8).write(to: file)

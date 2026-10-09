@@ -67,7 +67,8 @@ struct MIMEMessage {
             }
             body += "--\(mixed)--\r\n"
         }
-        let head = headers.map { "\($0.0): \($0.1)" }.joined(separator: "\r\n")
+        // A line break in a subject, name or address would start a header of its own, like a Bcc the user never wrote.
+        let head = headers.map { "\($0.0): \($0.1.filter { !$0.isNewline })" }.joined(separator: "\r\n")
         return Data((head + "\r\n\r\n" + body).utf8)
     }
 
