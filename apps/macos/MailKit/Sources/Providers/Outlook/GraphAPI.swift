@@ -114,6 +114,12 @@ enum Graph {
         var flag: Flag?
         var parentFolderId: String?
         var internetMessageId: String?
+        var internetMessageHeaders: [Header]?
+    }
+
+    struct Header: Decodable {
+        var name: String
+        var value: String
     }
 
     struct Attachment: Decodable {
@@ -129,6 +135,6 @@ enum Graph {
     static let messageFields = [
         "id", "conversationId", "subject", "bodyPreview", "body", "from", "toRecipients", "ccRecipients", "bccRecipients",
         "replyTo", "receivedDateTime", "sentDateTime", "lastModifiedDateTime", "isRead", "isDraft", "flag",
-        "parentFolderId", "internetMessageId",
+        "parentFolderId", "internetMessageId", "internetMessageHeaders",
     ].joined(separator: ",")
 }

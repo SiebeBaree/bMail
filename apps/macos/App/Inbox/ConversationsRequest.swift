@@ -6,6 +6,8 @@ import SQLiteData
 struct ConversationsRequest: FetchKeyRequest {
     var tab: Tab
     var accountID: Account.ID?
+    /// When set, the label's conversations instead of the tab, outside spam and trash.
+    var labelID: MailLabel.ID?
     /// When set, the search results in rank order instead of the tab.
     var searchIDs: [Conversation.ID]?
     var limit = 500
@@ -15,6 +17,13 @@ struct ConversationsRequest: FetchKeyRequest {
             let found = try scoped(Conversation.where { $0.id.in(searchIDs) }).fetchAll(db)
             let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return searchIDs.compactMap { byID[$0] }
+        }
+        if let labelID {
+            let ids = try ConversationLabel.where { $0.labelID.eq(labelID) }.select(\.conversationID).fetchAll(db)
+            return try scoped(Conversation.where { $0.id.in(ids) && $0.folder.neq(Folder.spam) && $0.folder.neq(Folder.trash) })
+                .order { $0.lastMessageAt.desc() }
+                .limit(limit)
+                .fetchAll(db)
         }
         switch tab {
         case .inbox, .done, .spam, .trash:

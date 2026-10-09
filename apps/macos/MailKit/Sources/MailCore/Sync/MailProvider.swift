@@ -9,6 +9,9 @@ public protocol MailProvider: Sendable {
     /// Whether mutations and sends for this account go through this provider.
     func owns(_ account: Account) -> Bool
 
+    /// Whether label changes go through this provider, whichever account the conversation is on.
+    var keepsLabels: Bool { get }
+
     /// Everything that changed after `cursor`, which is nil on first sync. The engine calls again with the returned
     /// cursor while `hasMore` is true.
     func pull(after cursor: String?) async throws -> ChangeSet
@@ -17,6 +20,10 @@ public protocol MailProvider: Sendable {
 
     /// Sends and returns the provider's own view of the sent message, which replaces the optimistic one.
     func send(_ message: OutgoingMessage) async throws -> ChangeSet
+}
+
+extension MailProvider {
+    public var keepsLabels: Bool { false }
 }
 
 /// What a provider reports back. Rows are complete: an upserted conversation replaces the stored one.
@@ -31,6 +38,11 @@ public struct ChangeSet: Sendable {
     /// Optimistic messages the provider's own copy replaces, for providers that pick their own ids.
     public var removedMessageIDs: [Message.ID] = []
     public var events: [MessageEvent] = []
+    public var labels: [MailLabel] = []
+    public var removedLabelIDs: [MailLabel.ID] = []
+    /// The whole set per conversation; an empty set clears it.
+    public var conversationLabels: [Conversation.ID: Set<MailLabel.ID>] = [:]
+    public var trackedSends: [TrackedSend] = []
     public var cursor: String?
     public var hasMore = false
 
@@ -39,7 +51,7 @@ public struct ChangeSet: Sendable {
     public var isEmpty: Bool {
         accounts.isEmpty && removedAccountIDs.isEmpty && domains.isEmpty && removedDomainIDs.isEmpty
             && conversations.isEmpty && removedConversationIDs.isEmpty && messages.isEmpty && removedMessageIDs.isEmpty
-            && events.isEmpty
+            && events.isEmpty && labels.isEmpty && removedLabelIDs.isEmpty && conversationLabels.isEmpty && trackedSends.isEmpty
     }
 }
 

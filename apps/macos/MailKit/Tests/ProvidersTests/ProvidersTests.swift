@@ -58,14 +58,14 @@ import Testing
 @Suite struct GmailMappingTests {
     let mapping = GmailMapping(accountID: UUID())
 
-    private func thread(labels: [[String]]) throws -> Gmail.Thread {
+    private func thread(labels: [[String]], headers extra: String = "") throws -> Gmail.Thread {
         let messages = labels.enumerated().map { index, labels in
             """
             {"id": "m\(index)", "threadId": "t1", "labelIds": \(labels), "snippet": "It&#39;s fine", "internalDate": "\(1_760_000_000_000 + index * 60_000)",
              "payload": {"mimeType": "multipart/alternative", "headers": [
                 {"name": "From", "value": "\(labels.contains("SENT") ? "Siebe <siebe@gmail.com>" : "Lena Peeters <lena@peeters.be>")"},
                 {"name": "To", "value": "siebe@gmail.com"}, {"name": "Subject", "value": "Contract"},
-                {"name": "Message-ID", "value": "<m\(index)@mail.gmail.com>"}],
+                {"name": "Message-ID", "value": "<m\(index)@mail.gmail.com>"}\(extra)],
               "parts": [
                 {"partId": "0", "mimeType": "text/plain", "body": {"size": 5, "data": "SGVsbG8"}},
                 {"partId": "1", "mimeType": "text/html", "body": {"size": 12, "data": "PHA-SGVsbG88L3A-"}},
@@ -120,6 +120,29 @@ import Testing
         // The same Gmail ids always map to the same rows, so a resync updates instead of duplicating.
         #expect(conversation.id == mapping.conversationID(thread: "t1"))
         #expect(first.id == mapping.messageID("m0"))
+    }
+}
+
+extension GmailMappingTests {
+    @Test func sentMailKeepsTheIdItHadInTheOutbox() throws {
+        let outboxID = UUID()
+        let header = #", {"name": "X-Bmail-ID", "value": "\#(outboxID.uuidString.lowercased())"}"#
+        let (_, messages) = try #require(mapping.conversation(try thread(labels: [["INBOX"], ["SENT"]], headers: header)))
+        #expect(messages.last?.id == outboxID)
+        // Only your own sent copy: anyone can put the header on mail they send you.
+        #expect(messages.first?.id == mapping.messageID("m0"))
+    }
+
+    @Test func listMailOffersOneClickUnsubscribe() throws {
+        let headers = #"""
+            , {"name": "List-Unsubscribe", "value": "<mailto:leave@list.example?subject=stop>, <https://list.example/u/1>"},
+            {"name": "List-Unsubscribe-Post", "value": "List-Unsubscribe=One-Click"}
+            """#
+        let (_, messages) = try #require(mapping.conversation(try thread(labels: [["INBOX"]], headers: headers)))
+        let unsubscribe = try #require(messages.first?.unsubscribe)
+        #expect(unsubscribe.url == URL(string: "https://list.example/u/1"))
+        #expect(unsubscribe.mailto == URL(string: "mailto:leave@list.example?subject=stop"))
+        #expect(unsubscribe.isOneClick)
     }
 }
 

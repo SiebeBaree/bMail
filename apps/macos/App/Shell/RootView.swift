@@ -15,6 +15,7 @@ struct RootView: View {
             }
             if model.isPaletteOpen { CommandPalette() }
             if model.isShortcutsOpen { ShortcutSheet() }
+            if model.isLabelPickerOpen { LabelPicker() }
             ToastStack(model.toasts)
         }
         .containerBackground(Color.chrome, for: .window)

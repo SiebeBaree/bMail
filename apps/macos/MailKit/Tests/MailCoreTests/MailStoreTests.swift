@@ -41,7 +41,7 @@ import Testing
         let conversation = conversation()
         try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1)]), source: "server")
 
-        try store.perform(.move(conversation.id, from: .inbox, to: .done))
+        try store.perform([.move(conversation.id, from: .inbox, to: .done)])
         // The server hasn't seen the archive yet and still reports the conversation in the inbox.
         try store.merge(changes([conversation], []), source: "server")
         #expect(try fetch(conversation.id).folder == .done)
@@ -55,7 +55,7 @@ import Testing
     @Test func aRefusedMutationIsRolledBack() throws {
         let conversation = conversation()
         try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1)]), source: "server")
-        try store.perform(.setStarred(conversation.id, true))
+        try store.perform([.setStarred(conversation.id, true)])
         try store.abandonMutation(try #require(try store.pendingMutations().first))
 
         #expect(try fetch(conversation.id).isStarred == false)
@@ -93,7 +93,7 @@ import Testing
     @Test func signingOutLeavesNothingBehind() throws {
         let conversation = conversation(subject: "Contract draft v3")
         try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1, text: "Page 4")]), source: "server")
-        try store.perform(.setRead(conversation.id, true))
+        try store.perform([.setRead(conversation.id, true)])
 
         try store.eraseAll()
 
@@ -115,6 +115,46 @@ import Testing
         let tracked = URL(string: "https://t.baree.be/c/\(link.id.uuidString.lowercased()).AbCdEfGhIjKlMnOpQrStUv")!
         #expect(store.trackedLinkDestination(for: tracked) == link.url)
         #expect(store.trackedLinkDestination(for: URL(string: "https://baree.be/c/nope")!) == nil)
+    }
+
+    @Test func aSyncedLabelSetLosesNoLabelYouJustAdded() throws {
+        let conversation = conversation()
+        let clients = MailLabel(id: UUID(), name: "Clients")
+        let urgent = MailLabel(id: UUID(), name: "Urgent")
+        var synced = changes([conversation], [message(in: conversation, minutesAgo: 1)])
+        synced.labels = [clients, urgent]
+        synced.conversationLabels = [conversation.id: [clients.id]]
+        try store.merge(synced, source: "server")
+
+        try store.perform([.label(conversation.id, urgent.id, true)])
+        // The api's set predates the change, so it only has Clients.
+        var stale = ChangeSet()
+        stale.conversationLabels = [conversation.id: [clients.id]]
+        try store.merge(stale, source: "server")
+        #expect(try labels(of: conversation.id) == [clients.id, urgent.id].sorted())
+
+        var removed = ChangeSet()
+        removed.removedLabelIDs = [clients.id]
+        try store.merge(removed, source: "server")
+        #expect(try labels(of: conversation.id) == [urgent.id])
+    }
+
+    @Test func aTrackedSendMarksTheProvidersCopyWhicheverArrivesFirst() throws {
+        let conversation = conversation()
+        let link = TrackedLink(id: UUID(), url: URL(string: "https://baree.be/proposal")!)
+        let early = message(in: conversation, direction: .outbound, minutesAgo: 2)
+        let late = message(in: conversation, direction: .outbound, minutesAgo: 1)
+        try store.merge(changes([conversation], [early]), source: "gmail")
+
+        var tracked = ChangeSet()
+        tracked.trackedSends = [TrackedSend(id: early.id, links: [link]), TrackedSend(id: late.id, links: [])]
+        try store.merge(tracked, source: "server")
+        try store.merge(changes([conversation], [early, late]), source: "gmail")
+
+        let stored = try store.database.read { db in try Message.where { $0.conversationID.eq(conversation.id) }.fetchAll(db) }
+        #expect(stored.count(where: \.trackingEnabled) == 2)
+        #expect(stored.first { $0.id == early.id }?.links == [link])
+        #expect(try fetch(conversation.id).isTracked)
     }
 
     @Test func everyMutationHasAnInverseThatUndoesIt() {
@@ -151,6 +191,13 @@ import Testing
         changes.conversations = conversations
         changes.messages = messages
         return changes
+    }
+
+    private func labels(of id: Conversation.ID) throws -> [MailLabel.ID] {
+        try store.database.read { db in
+            try ConversationLabel.where { $0.conversationID.eq(id) }.select(\.labelID).fetchAll(db)
+        }
+        .sorted()
     }
 
     private func fetch(_ id: Conversation.ID) throws -> Conversation {

@@ -17,6 +17,8 @@ struct MainView: View {
                 Group {
                     if let composer = model.composer, composer.replacesReader {
                         ComposerView(model: composer)
+                    } else if !model.checked.isEmpty {
+                        PickedConversations(count: model.checked.count)
                     } else if let id = model.selection {
                         ConversationView(conversationID: id)
                             .id(id)
@@ -58,6 +60,39 @@ private struct ColumnDivider: View {
                     )
             }
             .zIndex(1)
+    }
+}
+
+/// Takes the reader's place while conversations are picked: what the keys will do to all of them.
+private struct PickedConversations: View {
+    let count: Int
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(count == 1 ? "1 conversation selected" : "\(count) conversations selected").font(.pageTitle).tracking(-0.3)
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach([Command.markDone, .trash, .spam, .toggleStar, .toggleRead, .label, .checkAll], id: \.self) { command in
+                    Button { model.perform(command) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: command.symbol).font(.system(size: 12)).frame(width: 18)
+                            Text(command == .markDone && model.tab == .done ? "Move to inbox" : command.title)
+                            Spacer()
+                            HStack(spacing: 4) { ForEach(command.keys, id: \.self) { KeyCap($0) } }
+                        }
+                    }
+                    .buttonStyle(.dropdownItem)
+                }
+            }
+            .frame(width: 320)
+            Button { model.perform(.back) } label: {
+                HStack(spacing: 8) { Text("Clear selection"); KeyCap("Esc") }
+            }
+            .buttonStyle(.ghost)
+        }
+        .padding(40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.canvas)
     }
 }
 

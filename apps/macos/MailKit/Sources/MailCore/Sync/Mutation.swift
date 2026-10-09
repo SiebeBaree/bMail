@@ -6,10 +6,12 @@ public enum Mutation: Codable, Hashable, Sendable {
     case setRead(Conversation.ID, Bool)
     case setStarred(Conversation.ID, Bool)
     case move(Conversation.ID, from: Folder, to: Folder)
+    /// Adds or removes one label. Labels live in the api whatever account the conversation is on.
+    case label(Conversation.ID, MailLabel.ID, Bool)
 
     public var conversationID: Conversation.ID {
         switch self {
-        case let .setRead(id, _), let .setStarred(id, _), let .move(id, _, _): id
+        case let .setRead(id, _), let .setStarred(id, _), let .move(id, _, _), let .label(id, _, _): id
         }
     }
 
@@ -18,6 +20,7 @@ public enum Mutation: Codable, Hashable, Sendable {
         case let .setRead(id, isRead): .setRead(id, !isRead)
         case let .setStarred(id, isStarred): .setStarred(id, !isStarred)
         case let .move(id, from, to): .move(id, from: to, to: from)
+        case let .label(id, label, isOn): .label(id, label, !isOn)
         }
     }
 }

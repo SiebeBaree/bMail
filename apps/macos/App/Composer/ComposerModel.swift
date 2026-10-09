@@ -25,7 +25,20 @@ final class ComposerModel {
     /// The existing conversation for a reply, a fresh one for anything else.
     let conversationID: Conversation.ID
     let messageID: Message.ID
-    var accountID: Account.ID?
+    /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
+    var accountID: Account.ID? {
+        didSet {
+            guard accountID != oldValue else { return }
+            let old = oldValue.map(Signatures.text(for:)) ?? ""
+            let new = accountID.map(Signatures.text(for:)) ?? ""
+            let text = String(body.characters)
+            if !old.isEmpty, text.hasSuffix(old) {
+                body = AttributedString(String(text.dropLast(old.count)) + new)
+            } else if old.isEmpty, !new.isEmpty, text.isEmpty {
+                body = AttributedString("\n\n" + new)
+            }
+        }
+    }
     var to: [Address] = []
     var cc: [Address] = []
     var bcc: [Address] = []
@@ -63,9 +76,6 @@ final class ComposerModel {
     let accounts: [Account]
     var account: Account? { accounts.first { $0.id == accountID } }
 
-    /// Tracking runs through the api, so it exists for your own domains only.
-    var canTrack: Bool { account?.kind == .domain }
-
     var title: String {
         switch mode {
         case .new: "New message"
@@ -79,6 +89,7 @@ final class ComposerModel {
     static func new(app: AppModel, mailto: URL? = nil) -> ComposerModel {
         let model = ComposerModel(app: app, mode: .new, conversationID: UUID())
         model.accountID = app.accountFilter ?? model.accounts.first?.id
+        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
         if let mailto, let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false) {
             model.to = components.path.split(separator: ",").map { Address(email: String($0)) }
             model.subject = components.queryItems?.first { $0.name.lowercased() == "subject" }?.value ?? ""
@@ -113,9 +124,10 @@ final class ComposerModel {
         let author = last.from.name.map { "\($0) <\(last.from.email)>" } ?? last.from.email
         model.quoted = Quote(
             header: mode == .forward ? "Forwarded message from \(author), \(when):" : "On \(when), \(author) wrote:",
-            html: last.html ?? EmailDocument.textAsHTML(last.text ?? ""),
+            html: withoutOpenPixels(last.html ?? EmailDocument.textAsHTML(last.text ?? "")),
             text: last.text ?? ""
         )
+        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
         model.showsQuote = mode == .forward
         return model
     }
@@ -136,6 +148,12 @@ final class ComposerModel {
         return model
     }
 
+    /// Gmail and Outlook keep the copy of a tracked message that went out, pixel included. Quoting it would send that
+    /// pixel along again and count the next reader of this reply as an open of the old message.
+    static func withoutOpenPixels(_ html: String) -> String {
+        html.replacing(/<img[^>]+\/o\/[0-9a-f-]{36}\.[^>]*>/.ignoresCase(), with: "")
+    }
+
     private static func unique(_ addresses: [Address]) -> [Address] {
         var seen = Set<String>()
         return addresses.filter { seen.insert($0.email.lowercased()).inserted }
@@ -144,7 +162,6 @@ final class ComposerModel {
     // MARK: - Editing
 
     func toggleTracking() {
-        guard canTrack else { return }
         trackingEnabled.toggle()
     }
 
@@ -202,7 +219,7 @@ final class ComposerModel {
             subject: subject.trimmingCharacters(in: .whitespaces),
             html: rendered.html + (quote?.html ?? ""),
             text: rendered.text + (quote?.text ?? ""),
-            trackingEnabled: trackingEnabled && canTrack,
+            trackingEnabled: trackingEnabled,
             attachments: attachments
         )
         app?.composer = nil
@@ -231,5 +248,26 @@ extension String {
     /// A sanity check, not validation: catches typos like a missing @ before the server bounces them.
     var isPlausibleEmail: Bool {
         wholeMatch(of: /[^@\s]+@[^@\s]+\.[^@\s]+/) != nil
+    }
+}
+
+extension OutgoingMessage {
+    /// The message a `mailto:` unsubscribe link asks for, from the account the list mails. Nil for a link without an
+    /// address.
+    init?(unsubscribing mailto: URL, from account: Account) {
+        guard let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false), components.path.contains("@") else {
+            return nil
+        }
+        let field = { (name: String) in components.queryItems?.first { $0.name.lowercased() == name }?.value }
+        let text = field("body") ?? "unsubscribe"
+        self.init(
+            conversationID: UUID(),
+            accountID: account.id,
+            from: Address(name: account.displayName, email: account.address),
+            to: [Address(email: components.path)],
+            subject: field("subject") ?? "unsubscribe",
+            html: EmailDocument.textAsHTML(text),
+            text: text
+        )
     }
 }

@@ -164,5 +164,51 @@ private var migrator: DatabaseMigrator {
                 """
         )
     }
+    migrator.registerMigration("Labels, unsubscribe and tracked sends") { db in
+        try db.execute(
+            sql: """
+                ALTER TABLE "messages" ADD COLUMN "unsubscribe" TEXT;
+
+                -- Events no longer need their message in the cache: one for mail sent from Gmail can arrive before
+                -- Gmail's copy of that mail does.
+                CREATE TABLE "messageEvents_new" (
+                    "id" TEXT PRIMARY KEY NOT NULL,
+                    "messageID" TEXT NOT NULL,
+                    "kind" TEXT NOT NULL,
+                    "source" TEXT,
+                    "url" TEXT,
+                    "device" TEXT,
+                    "city" TEXT,
+                    "country" TEXT,
+                    "detail" TEXT,
+                    "occurredAt" TEXT NOT NULL
+                ) STRICT;
+                INSERT INTO "messageEvents_new" SELECT * FROM "messageEvents";
+                DROP TABLE "messageEvents";
+                ALTER TABLE "messageEvents_new" RENAME TO "messageEvents";
+                CREATE INDEX "messageEvents_by_message" ON "messageEvents"("messageID", "occurredAt");
+
+                CREATE TABLE "labels" (
+                    "id" TEXT PRIMARY KEY NOT NULL,
+                    "name" TEXT NOT NULL
+                ) STRICT;
+
+                CREATE TABLE "conversationLabels" (
+                    "conversationID" TEXT NOT NULL,
+                    "labelID" TEXT NOT NULL REFERENCES "labels"("id") ON DELETE CASCADE,
+                    PRIMARY KEY ("conversationID", "labelID")
+                ) STRICT;
+                CREATE INDEX "conversationLabels_by_label" ON "conversationLabels"("labelID");
+
+                CREATE TABLE "trackedSends" (
+                    "id" TEXT PRIMARY KEY NOT NULL,
+                    "links" TEXT NOT NULL
+                ) STRICT;
+
+                -- Every source syncs again from the start, so mail already cached picks up its unsubscribe headers.
+                DELETE FROM "syncCursors";
+                """
+        )
+    }
     return migrator
 }

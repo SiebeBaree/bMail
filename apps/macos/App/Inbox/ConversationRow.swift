@@ -5,8 +5,13 @@ import SwiftUI
 struct ConversationRow: View {
     let conversation: Conversation
     let accountTag: String?
+    let labels: [String]
     let showsSentTime: Bool
     let isSelected: Bool
+    let isChecked: Bool
+    /// While anything is picked every row shows its circle; otherwise only the hovered one does.
+    let isPicking: Bool
+    let toggleCheck: () -> Void
     @State private var isHovered = false
 
     var body: some View {
@@ -26,6 +31,9 @@ struct ConversationRow: View {
                 }
                 if conversation.hasAttachments {
                     Image(systemName: "paperclip").font(.system(size: 10)).foregroundStyle(Color.textMuted)
+                }
+                if !labels.isEmpty {
+                    Text(labels.joined(separator: " · ")).font(.geist(11.5)).foregroundStyle(Color.textSecondary).lineLimit(1)
                 }
                 if let accountTag {
                     Text(accountTag).font(.geistMono(11)).foregroundStyle(Color.textFaint)
@@ -48,16 +56,26 @@ struct ConversationRow: View {
         .frame(height: 62)
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .topLeading) {
-            if !conversation.isRead {
+            if isChecked || isPicking || isHovered {
+                Button(action: toggleCheck) {
+                    Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(isChecked ? Color.accent : Color.textFaint)
+                        .frame(width: 30, height: 40)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .help("Select (X)")
+            } else if !conversation.isRead {
                 Circle().fill(Color.link).frame(width: 6, height: 6).padding(.leading, 13).padding(.top, 18)
             }
         }
-        .background(isSelected ? Color.selected : isHovered ? Color.hover : Color.clear)
+        .background(isChecked ? Color.accent.opacity(0.12) : isSelected ? Color.selected : isHovered ? Color.hover : Color.clear)
         .overlay(alignment: .bottom) { Hairline().opacity(0.6) }
         .contentShape(.rect)
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityAddTraits(isSelected || isChecked ? .isSelected : [])
     }
 }
 

@@ -12,14 +12,16 @@ public struct OutlookProvider: MailProvider {
     private let address: String
     private let api: GraphAPI
     private let store: MailStore
+    private let tracking: ServerTracking
     private let folderIDs = FolderCache()
 
-    public init(account: Account, client: OAuthClient, store: MailStore) {
+    public init(account: Account, client: OAuthClient, store: MailStore, tracking: ServerTracking) {
         self.source = "outlook:\(account.id)"
         self.accountID = account.id
         self.address = account.address.lowercased()
         self.api = GraphAPI(tokens: TokenStore(accountID: account.id, client: client))
         self.store = store
+        self.tracking = tracking
     }
 
     public func owns(_ account: Account) -> Bool {
@@ -122,7 +124,7 @@ public struct OutlookProvider: MailProvider {
         let from = Address(wire.from) ?? Address(email: "unknown")
         let outbound = wire.parentFolderId == folders.sent || from.email == address
         return Message(
-            id: UUID(stableFrom: "outlook:\(accountID):message:\(wire.id)"),
+            id: messageID(wire.id),
             conversationID: conversation,
             accountID: accountID,
             direction: outbound ? .outbound : .inbound,
@@ -141,8 +143,20 @@ public struct OutlookProvider: MailProvider {
             trackingEnabled: false,
             attachments: [],
             links: [],
-            remoteID: wire.id
+            remoteID: wire.id,
+            unsubscribe: Unsubscribe(
+                header: header("list-unsubscribe", of: wire),
+                oneClick: header("list-unsubscribe-post", of: wire)?.lowercased().contains("one-click") == true
+            )
         )
+    }
+
+    private func header(_ name: String, of wire: Graph.Message) -> String? {
+        wire.internetMessageHeaders?.first { $0.name.lowercased() == name }?.value
+    }
+
+    private func messageID(_ id: String) -> Message.ID {
+        UUID(stableFrom: "outlook:\(accountID):message:\(id)")
     }
 
     private func stableID(conversation: String) -> Conversation.ID {
@@ -177,6 +191,7 @@ public struct OutlookProvider: MailProvider {
                 guard let id = message.remoteID else { continue }
                 let _: Graph.Folder = try await api.post("messages/\(id)/move", body: ["destinationId": destination])
             }
+        case .label: return
         }
     }
 
@@ -195,20 +210,22 @@ public struct OutlookProvider: MailProvider {
             var ccRecipients: [Graph.Recipient]
             var bccRecipients: [Graph.Recipient]
         }
-        let draft = Draft(
+        var draft = Draft(
             subject: message.subject,
             body: Graph.Body(contentType: "HTML", content: message.html),
             toRecipients: message.to.map(Graph.Recipient.init),
             ccRecipients: message.cc.map(Graph.Recipient.init),
             bccRecipients: message.bcc.map(Graph.Recipient.init)
         )
-        let created: Graph.Message
-        if let parentID = parent?.remoteID {
-            created = try await api.post("messages/\(parentID)/createReply", body: [String: String]())
-            try await api.patch("messages/\(created.id)", body: draft)
+        let created: Graph.Message = if let parentID = parent?.remoteID {
+            try await api.post("messages/\(parentID)/createReply", body: [String: String]())
         } else {
-            created = try await api.post("messages", body: draft)
+            try await api.post("messages", body: draft)
         }
+        // Immutable ids: the draft's id is the sent copy's, so its local id is known now and the opens can carry it.
+        let trackedID = messageID(created.id)
+        if message.trackingEnabled { draft.body.content = try await tracking.instrument(message.html, id: trackedID) }
+        if parent?.remoteID != nil || message.trackingEnabled { try await api.patch("messages/\(created.id)", body: draft) }
         for file in message.attachments {
             struct FileAttachment: Encodable {
                 var odataType = "#microsoft.graph.fileAttachment"
@@ -232,6 +249,7 @@ public struct OutlookProvider: MailProvider {
         var changes = (try? await pull(conversationOf: created.id)) ?? ChangeSet()
         changes.removedMessageIDs = [message.id]
         if parent == nil { changes.removedConversationIDs = [message.conversationID] }
+        if message.trackingEnabled { changes.trackedSends = [TrackedSend(id: trackedID, links: [])] }
         return changes
     }
 

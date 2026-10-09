@@ -24,6 +24,8 @@ struct MIMEMessage {
             ("Subject", Self.encodedWord(message.subject)),
             ("Date", Self.rfc5322Date(date)),
             ("Message-ID", messageID),
+            // Comes back on the provider's copy, which then keeps the id the composer gave this message.
+            ("X-Bmail-ID", message.id.uuidString.lowercased()),
         ]
         if let inReplyTo { headers.append(("In-Reply-To", inReplyTo)) }
         if !references.isEmpty { headers.append(("References", references.joined(separator: " "))) }

@@ -13,13 +13,15 @@ public struct GmailProvider: MailProvider {
     private let api: GmailAPI
     private let store: MailStore
     private let mapping: GmailMapping
+    private let tracking: ServerTracking
 
-    public init(account: Account, client: OAuthClient, store: MailStore) {
+    public init(account: Account, client: OAuthClient, store: MailStore, tracking: ServerTracking) {
         self.source = "gmail:\(account.id)"
         self.accountID = account.id
         self.api = GmailAPI(tokens: TokenStore(accountID: account.id, client: client))
         self.store = store
         self.mapping = GmailMapping(accountID: account.id)
+        self.tracking = tracking
     }
 
     public func owns(_ account: Account) -> Bool {
@@ -162,6 +164,7 @@ public struct GmailProvider: MailProvider {
             case .spam: try await modify(threadID, add: ["SPAM"], remove: ["INBOX"])
             case .trash: let _: Gmail.Thread = try await api.post("threads/\(threadID)/trash", body: GmailAPI.Empty())
             }
+        case .label: return
         }
     }
 
@@ -174,7 +177,10 @@ public struct GmailProvider: MailProvider {
     }
 
     public func send(_ message: OutgoingMessage) async throws -> ChangeSet {
-        let (threadID, parent) = try await store.database.read { db in
+        var message = message
+        // Gmail's copy keeps this id (see X-Bmail-ID), so it's the one the opens are recorded under.
+        if message.trackingEnabled { message.html = try await tracking.instrument(message.html, id: message.id) }
+        let (threadID, parent) = try await store.database.read { [message] db in
             let conversation = try Conversation.find(message.conversationID).fetchOne(db)
             let parent = try Message.where { $0.conversationID.eq(message.conversationID) && $0.id.neq(message.id) }
                 .order { $0.sentAt.desc() }
@@ -194,9 +200,11 @@ public struct GmailProvider: MailProvider {
         let sent: Gmail.Sent = try await api.post("messages/send", body: Body(raw: try mime.render().base64URLEncoded, threadId: threadID))
         // The mail is out, so a failed read-back mustn't fail the send: the next pull brings Gmail's copy.
         var changes = (try? await fetch(threads: [sent.threadId])) ?? ChangeSet()
-        // Gmail's copy replaces the optimistic one, which had the ids the composer gave it.
-        changes.removedMessageIDs.append(message.id)
+        // Gmail's copy has the message's id but not the conversation's: a new thread replaces the optimistic one.
+        if !changes.messages.contains(where: { $0.id == message.id }) { changes.removedMessageIDs.append(message.id) }
         changes.removedConversationIDs = threadID == nil ? [message.conversationID] : []
+        // Shows as tracked right away; its links follow with the api's next sync.
+        if message.trackingEnabled { changes.trackedSends = [TrackedSend(id: message.id, links: [])] }
         return changes
     }
 

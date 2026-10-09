@@ -1,3 +1,4 @@
+import AppKit
 import DesignSystem
 import MailCore
 import SQLiteData
@@ -5,10 +6,12 @@ import SwiftUI
 
 struct ConversationList: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
     @State private var query = ConversationQuery()
 
     var body: some View {
-        let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, searchIDs: model.searchResults)
+        let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, labelID: model.labelFilter, searchIDs: model.searchResults)
+        let labelNames = query.labelNames
         let tags = model.accountFilter == nil ? query.tags : [:]
         ScrollViewReader { proxy in
             ScrollView {
@@ -17,17 +20,21 @@ struct ConversationList: View {
                         ConversationRow(
                             conversation: conversation,
                             accountTag: tags[conversation.accountID],
+                            labels: labelNames[conversation.id] ?? [],
                             showsSentTime: model.tab == .sent || model.tab == .tracked,
-                            isSelected: model.selection == conversation.id
+                            isSelected: model.selection == conversation.id,
+                            isChecked: model.checked.contains(conversation.id),
+                            isPicking: !model.checked.isEmpty,
+                            toggleCheck: { model.toggleCheck(conversation.id) }
                         )
                         .id(conversation.id)
-                        .onTapGesture { model.selection = conversation.id }
+                        .onTapGesture { click(conversation.id) }
                     }
                 }
             }
             .scrollIndicators(.automatic)
             .overlay {
-                if query.conversations.isEmpty, !query.isLoading { EmptyList(tab: model.tab, isSearching: model.searchResults != nil) }
+                if query.conversations.isEmpty, !query.isLoading { EmptyList(tab: model.tab, isSearching: model.searchResults != nil, isLabel: model.labelFilter != nil) }
             }
             .onChange(of: model.selection) { _, id in
                 guard let id else { return }
@@ -37,6 +44,25 @@ struct ConversationList: View {
         .background(Color.canvas)
         .task(id: request) { await query.load(request) }
         .onChange(of: query.conversations.map(\.id), initial: true) { _, ids in model.listOrder = ids }
+        .onChange(of: [model.selection], initial: true) { _, _ in
+            model.pages.prefetch(around: model.selection, in: model.listOrder, dark: colorScheme == .dark)
+        }
+    }
+}
+
+extension ConversationList {
+    /// A click opens a conversation, ⌘-click picks it and Shift-click picks everything from the open one to it.
+    private func click(_ id: Conversation.ID) {
+        let modifiers = NSEvent.modifierFlags
+        if modifiers.contains(.command) {
+            model.toggleCheck(id)
+        } else if modifiers.contains(.shift), let anchor = model.selection,
+            let from = model.listOrder.firstIndex(of: anchor), let to = model.listOrder.firstIndex(of: id) {
+            model.checked.formUnion(model.listOrder[min(from, to)...max(from, to)])
+            model.selection = id
+        } else {
+            model.selection = id
+        }
     }
 }
 
@@ -45,10 +71,20 @@ struct ConversationList: View {
 final class ConversationQuery {
     @ObservationIgnored @Fetch(wrappedValue: [], ConversationsRequest(tab: .inbox)) var conversations: [Conversation]
     @ObservationIgnored @FetchAll(Account.all) var accounts
+    @ObservationIgnored @FetchAll(MailLabel.order(by: \.name)) var labels
+    @ObservationIgnored @FetchAll(ConversationLabel.all) var assignments
     var isLoading = true
 
     var tags: [Account.ID: String] {
         Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, $0.tag) })
+    }
+
+    /// Each conversation's label names, alphabetical.
+    var labelNames: [Conversation.ID: [String]] {
+        let names = Dictionary(uniqueKeysWithValues: labels.map { ($0.id, $0.name) })
+        return Dictionary(grouping: assignments, by: \.conversationID).mapValues { rows in
+            rows.compactMap { names[$0.labelID] }.sorted()
+        }
     }
 
     func load(_ request: ConversationsRequest) async {
@@ -61,6 +97,7 @@ final class ConversationQuery {
 private struct EmptyList: View {
     let tab: Tab
     let isSearching: Bool
+    let isLabel: Bool
 
     var body: some View {
         Text(message)
@@ -70,6 +107,7 @@ private struct EmptyList: View {
 
     private var message: String {
         if isSearching { return "No mail matches that." }
+        if isLabel { return "Nothing has this label. Add it to a conversation with L." }
         switch tab {
         case .inbox: return "Nothing left."
         case .starred: return "Star a conversation with S to keep it here."

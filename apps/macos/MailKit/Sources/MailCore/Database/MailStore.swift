@@ -45,8 +45,26 @@ public struct MailStore: Sendable {
             for event in changes.events {
                 try MessageEvent.upsert { event }.execute(db)
             }
+            for id in changes.removedLabelIDs {
+                try MailLabel.find(id).delete().execute(db)
+            }
+            for label in changes.labels {
+                try MailLabel.upsert { label }.execute(db)
+            }
+            let known = Set(try MailLabel.select(\.id).fetchAll(db))
+            for (conversationID, labelIDs) in changes.conversationLabels {
+                try ConversationLabel.where { $0.conversationID.eq(conversationID) }.delete().execute(db)
+                // A label deleted on another Mac can still be in a set that was saved before.
+                for labelID in labelIDs where known.contains(labelID) {
+                    try ConversationLabel.insert { ConversationLabel(conversationID: conversationID, labelID: labelID) }.execute(db)
+                }
+            }
+            for tracked in changes.trackedSends {
+                try TrackedSend.upsert { tracked }.execute(db)
+            }
+            let retracked = try overlayTrackedSends(on: changes.trackedSends.map(\.id) + changes.messages.map(\.id), in: db)
 
-            let touched = Set(changes.conversations.map(\.id) + changes.messages.map(\.conversationID))
+            let touched = Set(changes.conversations.map(\.id) + changes.messages.map(\.conversationID) + retracked)
                 .subtracting(changes.removedConversationIDs)
             for id in touched {
                 try refreshDerivedColumns(of: id, in: db)
@@ -67,8 +85,11 @@ public struct MailStore: Sendable {
     /// Empties the cache, for signing out: everything in it belongs to whoever was signed in.
     public func eraseAll() throws {
         try database.write { db in
-            // Deleting accounts and domains cascades to their conversations, messages and events.
-            for table in ["accounts", "domains", "pendingMutations", "outboxItems", "syncCursors", "contacts", "messageTexts"] {
+            // Deleting accounts and domains cascades to their conversations and messages.
+            for table in [
+                "accounts", "domains", "pendingMutations", "outboxItems", "syncCursors", "contacts", "messageTexts", "labels",
+                "conversationLabels", "trackedSends", "messageEvents",
+            ] {
                 try db.execute(sql: #"DELETE FROM "\#(table)""#)
             }
         }
@@ -76,14 +97,16 @@ public struct MailStore: Sendable {
 
     // MARK: - Your changes
 
-    /// Applies a mutation locally and queues it for the provider, atomically.
-    public func perform(_ mutation: Mutation) throws {
+    /// Applies mutations locally and queues them for their providers, all or none.
+    public func perform(_ mutations: [Mutation]) throws {
         try database.write { db in
-            try apply(mutation, in: db)
-            try PendingMutation.insert {
-                PendingMutation.Draft(mutation: mutation, attempts: 0, createdAt: Date())
+            for mutation in mutations {
+                try apply(mutation, in: db)
+                try PendingMutation.insert {
+                    PendingMutation.Draft(mutation: mutation, attempts: 0, createdAt: Date())
+                }
+                .execute(db)
             }
-            .execute(db)
         }
     }
 
@@ -119,7 +142,29 @@ public struct MailStore: Sendable {
             try conversation.update { $0.isStarred = #bind(isStarred) }.execute(db)
         case let .move(_, _, to):
             try conversation.update { $0.folder = #bind(to) }.execute(db)
+        case let .label(id, labelID, isOn):
+            try ConversationLabel.where { $0.conversationID.eq(id) && $0.labelID.eq(labelID) }.delete().execute(db)
+            if isOn, try MailLabel.find(labelID).fetchCount(db) > 0 {
+                try ConversationLabel.insert { ConversationLabel(conversationID: id, labelID: labelID) }.execute(db)
+            }
         }
+    }
+
+    /// Marks messages sent from Gmail or Outlook with tracking as tracked, with their links. Their providers' copies
+    /// don't carry that, so it's laid over them each time either side arrives. Returns the conversations it changed.
+    private func overlayTrackedSends(on ids: [Message.ID], in db: Database) throws -> [Conversation.ID] {
+        guard !ids.isEmpty else { return [] }
+        var conversations: [Conversation.ID] = []
+        for tracked in try TrackedSend.where({ $0.id.in(ids) }).fetchAll(db) {
+            guard let message = try Message.find(tracked.id).fetchOne(db) else { continue }
+            try Message.find(tracked.id).update {
+                $0.trackingEnabled = true
+                $0.links = #bind(tracked.links)
+            }
+            .execute(db)
+            conversations.append(message.conversationID)
+        }
+        return conversations
     }
 
     // MARK: - Outbox

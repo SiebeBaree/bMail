@@ -52,11 +52,14 @@ struct GmailMapping {
             )
         }
         let sentAt = wire.internalDate.flatMap(Double.init).map { Date(timeIntervalSince1970: $0 / 1000) } ?? .now
+        let isSent = (wire.labelIds ?? []).contains("SENT")
+        // Mail this app sent keeps the id it had in the outbox, which is also the id its tracking events carry.
+        let ownID = isSent ? headers["x-bmail-id"].flatMap(UUID.init(uuidString:)) : nil
         return Message(
-            id: messageID(wire.id),
+            id: ownID ?? messageID(wire.id),
             conversationID: conversationID(thread: wire.threadId),
             accountID: accountID,
-            direction: (wire.labelIds ?? []).contains("SENT") ? .outbound : .inbound,
+            direction: isSent ? .outbound : .inbound,
             deliveryStatus: nil,
             messageIDHeader: headers["message-id"],
             from: AddressList.parse(headers["from"] ?? "").first ?? Address(email: "unknown"),
@@ -72,7 +75,11 @@ struct GmailMapping {
             trackingEnabled: false,
             attachments: attachments,
             links: [],
-            remoteID: wire.id
+            remoteID: wire.id,
+            unsubscribe: Unsubscribe(
+                header: headers["list-unsubscribe"],
+                oneClick: headers["list-unsubscribe-post"]?.lowercased().contains("one-click") == true
+            )
         )
     }
 

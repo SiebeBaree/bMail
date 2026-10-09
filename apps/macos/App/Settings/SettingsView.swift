@@ -15,6 +15,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 48) {
                 Text("Settings").font(.pageTitle).tracking(-0.3)
                 AccountsSection(isDomainFieldFocused: $isDomainFieldFocused)
+                LabelsSection()
                 DomainsSection(isDomainFieldFocused: $isDomainFieldFocused)
             }
             .padding(.horizontal, 40)
@@ -223,29 +224,55 @@ private struct AccountRow: View {
     let isCatchAll: Bool
     let remove: () -> Void
     @State private var isHovered = false
+    @State private var isEditingSignature = false
+    @State private var signature = ""
 
     var body: some View {
-        HStack(spacing: 12) {
-            Avatar(account.displayName, size: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.address).font(.uiMedium)
-                Text(isCatchAll ? "\(account.kind.label) · catch-all" : account.kind.label)
-                    .font(.geist(12))
-                    .foregroundStyle(Color.textMuted)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                Avatar(account.displayName, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(account.address).font(.uiMedium)
+                    Text(isCatchAll ? "\(account.kind.label) · catch-all" : account.kind.label)
+                        .font(.geist(12))
+                        .foregroundStyle(Color.textMuted)
+                }
+                Spacer()
+                Group {
+                    Button(isEditingSignature ? "Done" : "Signature") { isEditingSignature.toggle() }
+                        .buttonStyle(.ghost)
+                    ConfirmButton(
+                        title: account.kind == .domain ? "Delete" : "Disconnect",
+                        confirmation: account.kind == .domain ? "Delete with all its mail" : "Disconnect from this Mac",
+                        action: remove
+                    )
+                }
+                .opacity(isHovered || isEditingSignature ? 1 : 0)
+                if number <= 9 { KeyCap("⌘\(number)") }
             }
-            Spacer()
-            ConfirmButton(
-                title: account.kind == .domain ? "Delete" : "Disconnect",
-                confirmation: account.kind == .domain ? "Delete with all its mail" : "Disconnect from this Mac",
-                action: remove
-            )
-            .opacity(isHovered ? 1 : 0)
-            if number <= 9 { KeyCap("⌘\(number)") }
+            .frame(height: 56)
+            if isEditingSignature {
+                TextEditor(text: $signature)
+                    .font(.ui)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(height: 96)
+                    .background(Color.canvas, in: .rect(cornerRadius: Metrics.controlRadius))
+                    .overlay(RoundedRectangle(cornerRadius: Metrics.controlRadius).strokeBorder(Color.lineStrong))
+                    .overlay(alignment: .topLeading) {
+                        if signature.isEmpty {
+                            Text("Signature for mail from \(account.address)").foregroundStyle(Color.textFaint).padding(13).allowsHitTesting(false)
+                        }
+                    }
+                    .padding(.leading, 40)
+                    .padding(.bottom, 14)
+                    .onChange(of: signature) { _, text in Signatures.set(text, for: account.id) }
+            }
         }
-        .frame(height: 56)
         .overlay(alignment: .bottom) { Hairline() }
         .contentShape(.rect)
         .onHover { isHovered = $0 }
+        .onAppear { signature = Signatures.text(for: account.id) }
     }
 }
 
@@ -287,6 +314,81 @@ private struct NewAddressRow: View {
     private func submit() {
         guard !trimmed.isEmpty else { return }
         create(trimmed)
+    }
+}
+
+/// Your labels, across every account. They're created where you use them, with L; here they're renamed and removed.
+private struct LabelsSection: View {
+    @Environment(AppModel.self) private var model
+    @FetchAll(MailLabel.order(by: \.name)) private var labels
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            SettingsHeader(title: "Labels") { EmptyView() }
+            if let error {
+                Text(error).foregroundStyle(Color.danger).padding(.vertical, 12)
+            }
+            ForEach(labels) { label in
+                LabelRow(label: label, rename: { rename(label, to: $0) }, delete: { delete(label) })
+            }
+            if labels.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Press").foregroundStyle(Color.textMuted)
+                    KeyCap("L")
+                    Text("on a conversation to create your first label.").foregroundStyle(Color.textMuted)
+                }
+                .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private func rename(_ label: MailLabel, to name: String) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, name != label.name else { return }
+        run { try await ServerAdmin(connection: model.server).renameLabel(label.id, to: name) }
+    }
+
+    private func delete(_ label: MailLabel) {
+        run { try await ServerAdmin(connection: model.server).deleteLabel(label.id) }
+    }
+
+    private func run(_ operation: @escaping () async throws -> ChangeSet) {
+        Task {
+            do {
+                try model.store.merge(try await operation(), source: "labels")
+                error = nil
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
+    }
+}
+
+private struct LabelRow: View {
+    let label: MailLabel
+    let rename: (String) -> Void
+    let delete: () -> Void
+    @State private var name = ""
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "tag").font(.system(size: 11)).foregroundStyle(Color.textMuted).frame(width: 28)
+            TextField("Label", text: $name)
+                .textFieldStyle(.plain)
+                .font(.uiMedium)
+                .onSubmit { rename(name) }
+            Spacer()
+            ConfirmButton(title: "Delete", confirmation: "Delete and take it off every conversation", action: delete)
+                .opacity(isHovered ? 1 : 0)
+        }
+        .frame(height: 48)
+        .overlay(alignment: .bottom) { Hairline() }
+        .contentShape(.rect)
+        .onHover { isHovered = $0 }
+        .onAppear { name = label.name }
+        .onChange(of: label.name) { _, new in name = new }
     }
 }
 

@@ -6,6 +6,7 @@ struct ComposerView: View {
     @Bindable var model: ComposerModel
     @Environment(\.fontResolutionContext) private var fontContext
     @FocusState private var focus: Field?
+    @State private var isFromOpen = false
 
     enum Field { case subject, body }
 
@@ -82,11 +83,7 @@ struct ComposerView: View {
     private var fromRow: some View {
         HStack(spacing: 12) {
             Text("From").foregroundStyle(Color.textMuted).frame(width: 56, alignment: .leading)
-            Menu {
-                ForEach(model.accounts) { account in
-                    Button("\(account.displayName) <\(account.address)>") { model.accountID = account.id }
-                }
-            } label: {
+            Button { isFromOpen.toggle() } label: {
                 HStack(spacing: 8) {
                     Text(model.account.map { "\($0.displayName) <\($0.address)>" } ?? "Choose an account")
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
@@ -94,11 +91,28 @@ struct ComposerView: View {
                 .padding(.horizontal, 10)
                 .frame(height: 26)
                 .overlay(RoundedRectangle(cornerRadius: Metrics.controlRadius).strokeBorder(Color.lineStrong))
+                .contentShape(.rect)
             }
-            .menuStyle(.button)
             .buttonStyle(.plain)
-            .menuIndicator(.hidden)
             .fixedSize()
+            .dropdown(isPresented: $isFromOpen) {
+                ForEach(model.accounts) { account in
+                    Button {
+                        isFromOpen = false
+                        model.accountID = account.id
+                    } label: {
+                        HStack(spacing: 10) {
+                            Avatar(account.displayName, size: 20)
+                            Text(account.address)
+                            Spacer(minLength: 16)
+                            if account.id == model.accountID {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                            }
+                        }
+                    }
+                    .buttonStyle(.dropdownItem)
+                }
+            }
             Spacer()
             if !model.showsCopies {
                 Button("Cc Bcc") { model.showsCopies = true }
@@ -141,20 +155,16 @@ struct ComposerView: View {
                 .buttonStyle(.ghost)
                 .help("Attach files")
             Rectangle().fill(Color.lineStrong).frame(width: 1, height: 18)
-            if model.canTrack {
-                Toggle(isOn: $model.trackingEnabled) {
-                    Text("Track opens and clicks").foregroundStyle(model.trackingEnabled ? Color.textPrimary : Color.textSecondary)
-                }
-                .toggleStyle(.mailSwitch)
-                KeyCap("⌘⇧T")
-                if model.trackingEnabled {
-                    Text("Adds a hidden image and routes links through \(model.trackingHost). Never counts you.")
-                        .font(.geist(12))
-                        .foregroundStyle(Color.textMuted)
-                        .lineLimit(1)
-                }
-            } else {
-                Text("Tracking works on your own domains.").font(.geist(12)).foregroundStyle(Color.textFaint)
+            Toggle(isOn: $model.trackingEnabled) {
+                Text("Track opens and clicks").foregroundStyle(model.trackingEnabled ? Color.textPrimary : Color.textSecondary)
+            }
+            .toggleStyle(.mailSwitch)
+            KeyCap("⌘⇧T")
+            if model.trackingEnabled {
+                Text("Adds a hidden image and tracked links. Never counts you here.")
+                    .font(.geist(12))
+                    .foregroundStyle(Color.textMuted)
+                    .lineLimit(1)
             }
             Spacer()
             Button {
@@ -210,9 +220,4 @@ private struct QuoteToggle: View {
     }
 }
 
-extension ComposerModel {
-    var trackingHost: String {
-        guard let domain = account?.address.split(separator: "@").last else { return "your tracking host" }
-        return "t.\(domain)"
-    }
-}
+

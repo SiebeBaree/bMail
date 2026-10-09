@@ -49,6 +49,32 @@ public struct TrackedLink: Codable, Hashable, Sendable {
     }
 }
 
+/// How to leave a mailing list, from its List-Unsubscribe headers. One-click (RFC 8058) is a POST to `url` that needs
+/// nothing else; without it the mailto address gets a message, or the url opens in the browser.
+public struct Unsubscribe: Codable, Hashable, Sendable {
+    public var url: URL?
+    public var mailto: URL?
+    public var isOneClick: Bool
+
+    /// Nil when the header names neither an https url nor a mailto address.
+    public init?(header: String?, oneClick: Bool) {
+        let targets = (header ?? "")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " <>\t\r\n")) }
+            .compactMap(URL.init(string:))
+        url = targets.first { $0.scheme?.lowercased() == "https" }
+        mailto = targets.first { $0.scheme?.lowercased() == "mailto" }
+        isOneClick = oneClick && url != nil
+        if url == nil, mailto == nil { return nil }
+    }
+
+    public init(url: URL?, mailto: URL?, isOneClick: Bool) {
+        self.url = url
+        self.mailto = mailto
+        self.isOneClick = isOneClick
+    }
+}
+
 public struct DNSRecord: Codable, Hashable, Sendable {
     public enum Purpose: String, Codable, Sendable { case dkim, spf, receiving, tracking, dmarc }
     public enum Status: String, Codable, Sendable { case pending, verified, failed, optional }

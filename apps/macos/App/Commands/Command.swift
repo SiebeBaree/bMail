@@ -4,15 +4,17 @@ import SwiftUI
 /// can't exist in one place and be missing in another.
 enum Command: Hashable, CaseIterable, Identifiable {
     case next, previous, back
-    case markDone, trash, spam, toggleStar, toggleRead, undo
+    case markDone, trash, spam, toggleStar, toggleRead, label, unsubscribe, undo
+    case toggleCheck, extendNext, extendPrevious, checkAll
     case compose, reply, replyAll, forward
     case search, palette, shortcuts, settings
     case go(Tab)
     case allAccounts, account(Int)
 
     static let allCases: [Command] =
-        [.next, .previous, .back, .markDone, .trash, .spam, .toggleStar, .toggleRead, .undo, .compose, .reply, .replyAll,
-         .forward, .search, .palette, .shortcuts, .settings]
+        [.next, .previous, .back, .toggleCheck, .extendNext, .extendPrevious, .checkAll, .markDone, .trash, .spam,
+         .toggleStar, .toggleRead, .label, .unsubscribe, .undo, .compose, .reply, .replyAll, .forward, .search, .palette,
+         .shortcuts, .settings]
         + Tab.allCases.map(Command.go)
         + [.allAccounts] + (1...9).map(Command.account)
 
@@ -28,7 +30,8 @@ enum Command: Hashable, CaseIterable, Identifiable {
     var group: Group {
         switch self {
         case .next, .previous, .back, .go, .allAccounts, .account, .search: .move
-        case .markDone, .trash, .spam, .toggleStar, .toggleRead, .undo: .triage
+        case .toggleCheck, .extendNext, .extendPrevious, .checkAll, .markDone, .trash, .spam, .toggleStar, .toggleRead, .label,
+            .unsubscribe, .undo: .triage
         case .compose, .reply, .replyAll, .forward: .write
         case .palette, .shortcuts, .settings: .app
         }
@@ -44,6 +47,12 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .spam: "Report spam"
         case .toggleStar: "Star"
         case .toggleRead: "Mark read or unread"
+        case .label: "Label"
+        case .unsubscribe: "Unsubscribe"
+        case .toggleCheck: "Select conversation"
+        case .extendNext: "Select next too"
+        case .extendPrevious: "Select previous too"
+        case .checkAll: "Select all"
         case .undo: "Undo"
         case .compose: "New message"
         case .reply: "Reply"
@@ -69,6 +78,10 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .spam: "exclamationmark.octagon"
         case .toggleStar: "star"
         case .toggleRead: "circle.fill"
+        case .label: "tag"
+        case .unsubscribe: "bell.slash"
+        case .toggleCheck, .extendNext, .extendPrevious: "checkmark.circle"
+        case .checkAll: "checklist"
         case .undo: "arrow.uturn.backward"
         case .compose: "square.and.pencil"
         case .reply: "arrowshape.turn.up.left"
@@ -94,6 +107,12 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .spam: ["!"]
         case .toggleStar: ["S"]
         case .toggleRead: ["U"]
+        case .label: ["L"]
+        case .unsubscribe: []
+        case .toggleCheck: ["X"]
+        case .extendNext: ["⇧J"]
+        case .extendPrevious: ["⇧K"]
+        case .checkAll: ["⌘A"]
         case .undo: ["Z"]
         case .compose: ["C"]
         case .reply: ["R"]
@@ -119,6 +138,8 @@ enum Command: Hashable, CaseIterable, Identifiable {
         case .spam: "!"
         case .toggleStar: "s"
         case .toggleRead: "u"
+        case .label: "l"
+        case .toggleCheck: "x"
         case .undo: "z"
         case .compose: "c"
         case .reply: "r"
@@ -133,7 +154,7 @@ enum Command: Hashable, CaseIterable, Identifiable {
     /// Commands that act on the open conversation and do nothing without one.
     var needsConversation: Bool {
         switch self {
-        case .markDone, .trash, .spam, .toggleStar, .toggleRead, .reply, .replyAll, .forward: true
+        case .markDone, .trash, .spam, .toggleStar, .toggleRead, .label, .unsubscribe, .toggleCheck, .reply, .replyAll, .forward: true
         default: false
         }
     }
@@ -141,7 +162,7 @@ enum Command: Hashable, CaseIterable, Identifiable {
     /// Shown in the palette. Account switching is reached through its own entries.
     var isInPalette: Bool {
         if case .account = self { return false }
-        return self != .palette && self != .back
+        return ![.palette, .back, .extendNext, .extendPrevious].contains(self)
     }
 }
 

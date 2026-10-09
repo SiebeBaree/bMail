@@ -98,8 +98,28 @@ extension Message {
             attachments: wire.attachments.map {
                 Attachment(id: UUID(wire: $0.id), filename: $0.filename, contentType: $0.contentType, size: $0.size, contentID: $0.contentId)
             },
-            links: wire.links.compactMap { link in URL(string: link.url).map { TrackedLink(id: UUID(wire: link.id), url: $0) } }
+            links: wire.links.compactMap(TrackedLink.init),
+            unsubscribe: Unsubscribe(header: wire.listUnsubscribe, oneClick: wire.listUnsubscribeOneClick)
         )
+    }
+}
+
+extension TrackedLink {
+    init?(_ wire: Wire.TrackedLink) {
+        guard let url = URL(string: wire.url) else { return nil }
+        self.init(id: UUID(wire: wire.id), url: url)
+    }
+}
+
+extension MailLabel {
+    init(_ wire: Wire.Label) {
+        self.init(id: UUID(wire: wire.id), name: wire.name)
+    }
+}
+
+extension TrackedSend {
+    init(_ wire: Wire.TrackedMessage) {
+        self.init(id: UUID(wire: wire.id), links: wire.links.compactMap(TrackedLink.init))
     }
 }
 

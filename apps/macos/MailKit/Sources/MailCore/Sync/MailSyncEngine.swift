@@ -117,7 +117,7 @@ public actor MailSyncEngine {
         // A provider that fails keeps its order and waits for the next pass; the others carry on.
         var blocked = Set<String>()
         for pending in (try? store.pendingMutations()) ?? [] {
-            guard let provider = try? provider(for: pending.mutation.conversationID) else {
+            guard let provider = try? provider(for: pending.mutation) else {
                 // The account is gone, so there's nobody left to tell.
                 try? store.completeMutation(pending.id)
                 continue
@@ -174,9 +174,10 @@ public actor MailSyncEngine {
 
     // MARK: - Routing
 
-    private func provider(for conversationID: Conversation.ID) throws -> (any MailProvider)? {
+    private func provider(for mutation: Mutation) throws -> (any MailProvider)? {
+        if case .label = mutation { return providers.first { $0.keepsLabels } }
         let accountID = try store.database.read { db in
-            try Conversation.find(conversationID).select(\.accountID).fetchOne(db)
+            try Conversation.find(mutation.conversationID).select(\.accountID).fetchOne(db)
         }
         guard let accountID else { return nil }
         return try provider(forAccount: accountID)

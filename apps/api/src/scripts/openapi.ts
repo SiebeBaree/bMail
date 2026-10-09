@@ -26,7 +26,14 @@ const app = await buildApp({
     publicUrl: "http://localhost",
 });
 await app.ready();
-await writeFile(output, `${JSON.stringify(withoutUnusedSchemas(app.swagger()), null, 2)}\n`);
+// zod marks every object closed, and swift-openapi-generator turns that into decoders that reject unknown keys. A
+// response that gains a field would then break every app build already installed, so objects stay open.
+const spec = JSON.stringify(
+    withoutUnusedSchemas(app.swagger()),
+    (key, value: unknown) => (key === "additionalProperties" && value === false ? undefined : value),
+    2,
+);
+await writeFile(output, `${spec}\n`);
 await app.close();
 process.stdout.write(`Wrote ${output.pathname}\n`);
 

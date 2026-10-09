@@ -2,19 +2,24 @@ import APIClient
 import Foundation
 import MailCore
 import OpenAPIRuntime
+import SQLiteData
 
 /// Your own domains, through the api. One provider serves every mailbox on every domain.
 public struct ServerProvider: MailProvider {
     public let source = "server"
     private let connection: ServerConnection
+    private let store: MailStore
 
-    public init(connection: ServerConnection) {
+    public init(connection: ServerConnection, store: MailStore) {
         self.connection = connection
+        self.store = store
     }
 
     public func owns(_ account: Account) -> Bool {
         account.kind == .domain
     }
+
+    public var keepsLabels: Bool { true }
 
     public func pull(after cursor: String?) async throws -> ChangeSet {
         let response = try await call { try await connection.client.sync(query: .init(cursor: cursor.flatMap(Int.init), limit: 200)) }
@@ -29,6 +34,13 @@ public struct ServerProvider: MailProvider {
         changes.conversations = wire.conversations.map(Conversation.init)
         changes.messages = wire.messages.map(Message.init)
         changes.events = wire.events.map(MessageEvent.init)
+        changes.labels = wire.labels.filter { $0.deletedAt == nil }.map(MailLabel.init)
+        changes.removedLabelIDs = wire.labels.filter { $0.deletedAt != nil }.map { UUID(wire: $0.id) }
+        changes.conversationLabels = Dictionary(
+            wire.conversationLabels.map { (UUID(wire: $0.conversationId), Set($0.labelIds.map(UUID.init(wire:)))) },
+            uniquingKeysWith: { _, last in last }
+        )
+        changes.trackedSends = wire.trackedMessages.map(TrackedSend.init)
         changes.cursor = String(wire.cursor)
         changes.hasMore = wire.hasMore
         return changes
@@ -40,6 +52,7 @@ public struct ServerProvider: MailProvider {
         case let .setRead(_, isRead): body.isRead = isRead
         case let .setStarred(_, isStarred): body.isStarred = isStarred
         case let .move(_, _, to): body.folder = .init(rawValue: to.rawValue)
+        case .label: return try await pushLabels(of: mutation.conversationID)
         }
         let response = try await call {
             try await connection.client.updateConversation(path: .init(id: mutation.conversationID.uuidString.lowercased()), body: .json(body))
@@ -47,6 +60,26 @@ public struct ServerProvider: MailProvider {
         switch response {
         case .ok: return
         case .notFound: throw ProviderError(.rejected, "That conversation doesn't exist on the server anymore.")
+        default: throw unexpected(response)
+        }
+    }
+
+    /// Sends the conversation's whole set as it is now, so pushes that arrive late or twice still end in the right
+    /// state.
+    private func pushLabels(of conversationID: Conversation.ID) async throws {
+        let labelIDs = try await store.database.read { db in
+            try ConversationLabel.where { $0.conversationID.eq(conversationID) }.select(\.labelID).fetchAll(db)
+        }
+        let response = try await call {
+            try await connection.client.setConversationLabels(
+                path: .init(id: conversationID.wire),
+                body: .json(.init(labelIds: labelIDs.map(\.wire)))
+            )
+        }
+        switch response {
+        case .ok: return
+        case let .notFound(error): throw ProviderError(.rejected, try error.body.json.message)
+        case let .badRequest(error): throw ProviderError(.rejected, try error.body.json.message)
         default: throw unexpected(response)
         }
     }

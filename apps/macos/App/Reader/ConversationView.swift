@@ -64,7 +64,20 @@ struct ConversationView: View {
                 Image(systemName: "envelope").font(.system(size: 11)).foregroundStyle(Color.textMuted)
                 Text(account.address).font(.meta).foregroundStyle(Color.textMuted)
             }
+            ForEach(thread.labels) { label in
+                Text(label.name).font(.geist(12)).foregroundStyle(Color.textSecondary).padding(.leading, 10)
+            }
             Spacer()
+            if let conversation = thread.conversation, thread.messages.contains(where: { $0.direction == .inbound && $0.unsubscribe != nil }) {
+                if model.unsubscribed.contains(conversation.id) {
+                    Text("Unsubscribed").font(.geist(12)).foregroundStyle(Color.textMuted).padding(.trailing, 8)
+                } else {
+                    Button("Unsubscribe") { model.perform(.unsubscribe) }
+                        .buttonStyle(.ghost)
+                        .help("Leave this mailing list")
+                }
+            }
+            ActionButton(symbol: "tag", key: "L", help: "Label") { model.perform(.label) }
             ActionButton(symbol: "checkmark", key: "E", help: model.tab == .done ? "Move to inbox" : "Mark as done") {
                 model.perform(.markDone)
             }

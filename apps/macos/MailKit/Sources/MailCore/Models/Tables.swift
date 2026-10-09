@@ -134,12 +134,15 @@ public struct Message: Hashable, Identifiable, Sendable {
     public var links: [TrackedLink]
     /// The provider's own id for this message, when it has one.
     public var remoteID: String?
+    @Column(as: Unsubscribe.JSONRepresentation?.self)
+    public var unsubscribe: Unsubscribe?
 
     public init(
         id: UUID, conversationID: Conversation.ID, accountID: Account.ID, direction: Direction,
         deliveryStatus: DeliveryStatus?, messageIDHeader: String?, from: Address, to: [Address], cc: [Address],
         bcc: [Address], replyTo: [Address], subject: String, html: String?, text: String?, snippet: String,
-        sentAt: Date, trackingEnabled: Bool, attachments: [Attachment], links: [TrackedLink], remoteID: String? = nil
+        sentAt: Date, trackingEnabled: Bool, attachments: [Attachment], links: [TrackedLink], remoteID: String? = nil,
+        unsubscribe: Unsubscribe? = nil
     ) {
         self.id = id
         self.conversationID = conversationID
@@ -161,6 +164,7 @@ public struct Message: Hashable, Identifiable, Sendable {
         self.attachments = attachments
         self.links = links
         self.remoteID = remoteID
+        self.unsubscribe = unsubscribe
     }
 
     /// Attachments to list under the body. Inline images are part of the body already.
@@ -213,6 +217,46 @@ public struct MessageEvent: Hashable, Identifiable, Sendable {
     /// Whether a person did this. Gmail's proxy only loads images when someone opens the mail, so it counts; Apple's
     /// proxy and security scanners fetch on delivery and are shown but never counted.
     public var isReader: Bool { source == nil || source == .person || source == .googleProxy }
+}
+
+/// One of your labels. They're bMail's own, kept by the api for every account, so Gmail and Outlook never see them.
+/// Not `Label`, which every view file would read as SwiftUI's.
+@Table("labels")
+public struct MailLabel: Hashable, Identifiable, Sendable {
+    public let id: UUID
+    public var name: String
+
+    public init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// A label on a conversation. Not tied to the conversation row: a Gmail conversation is replaced on every resync, and
+/// its labels arrive from the api on their own schedule.
+@Table
+public struct ConversationLabel: Hashable, Sendable {
+    public var conversationID: Conversation.ID
+    public var labelID: MailLabel.ID
+
+    public init(conversationID: Conversation.ID, labelID: MailLabel.ID) {
+        self.conversationID = conversationID
+        self.labelID = labelID
+    }
+}
+
+/// A message sent from Gmail or Outlook with tracking, as the api knows it. The provider's copy of the message doesn't
+/// say it's tracked, so this is laid over it whenever either arrives.
+@Table
+public struct TrackedSend: Hashable, Identifiable, Sendable {
+    public let id: Message.ID
+    @Column(as: [TrackedLink].JSONRepresentation.self)
+    public var links: [TrackedLink]
+
+    public init(id: Message.ID, links: [TrackedLink]) {
+        self.id = id
+        self.links = links
+    }
 }
 
 /// A mutation waiting for its provider, in the order they were made.
