@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { Address } from "@repo/contracts";
-import { conversations, createDb, domains, events, links, mailboxes, messages, users } from "@repo/db";
+import { conversations, createDb, domains, events, links, mailboxes, messages } from "@repo/db";
 import { env } from "@repo/env/api";
 import { eq } from "drizzle-orm";
 
-import { createAuth } from "../auth";
+import { createAuth, setPassword } from "../auth";
 
 // Local development only: fills a dev database with the inbox from the design mocks, so the app has something real
 // to render without Resend. It only reads SEED_DATABASE_URL, never DATABASE_URL, so a .env pointing at production
@@ -14,7 +14,7 @@ if (process.env.NODE_ENV !== "development") throw new Error("The seed only runs 
 const seedDatabaseUrl = process.env.SEED_DATABASE_URL;
 if (!seedDatabaseUrl) throw new Error("Set SEED_DATABASE_URL to a dev database to seed it.");
 
-const OWNER = { email: env.ALLOWED_EMAILS[0] ?? "siebe@baree.be", password: "dev-password-123", name: "Siebe Baree" };
+const OWNER = { email: env.ALLOWED_EMAILS[0] ?? "siebe@baree.be", password: "dev-password-123" };
 const db = createDb(seedDatabaseUrl);
 const auth = createAuth({
     db,
@@ -23,8 +23,7 @@ const auth = createAuth({
     allowedEmails: env.ALLOWED_EMAILS,
 });
 
-const [existing] = await db.select().from(users).where(eq(users.email, OWNER.email));
-const userId = existing?.id ?? (await auth.api.signUpEmail({ body: OWNER })).user.id;
+const userId = await setPassword(auth, OWNER.email, OWNER.password);
 
 const domainId = randomUUID();
 const siebe = randomUUID();

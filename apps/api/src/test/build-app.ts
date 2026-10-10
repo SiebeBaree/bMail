@@ -1,12 +1,12 @@
 import type { LightMyRequestResponse } from "fastify";
 
 import { buildApp } from "../app";
-import { createAuth } from "../auth";
+import { createAuth, setPassword } from "../auth";
 import { createMemoryStorage } from "../lib/storage";
 import { createTestDb } from "./db";
 import { createFakeResend } from "./fake-resend";
 
-export const OWNER = { email: "siebe@baree.test", password: "correct horse battery", name: "Siebe" };
+export const OWNER = { email: "siebe@baree.test", password: "correct horse battery" };
 const PUBLIC_URL = "http://api.test";
 
 export async function buildTestApp() {
@@ -29,11 +29,12 @@ export async function buildTestApp() {
     });
     await app.ready();
 
-    /** Signs up the owner and returns the bearer header the app would send. */
+    /** Gives the owner a password the way the password script does, signs in and returns the app's bearer header. */
     async function signIn(): Promise<{ authorization: string }> {
-        const response = await app.inject({ method: "POST", url: "/api/auth/sign-up/email", payload: OWNER });
+        await setPassword(auth, OWNER.email, OWNER.password);
+        const response = await app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: OWNER });
         const token = response.headers["set-auth-token"];
-        if (typeof token !== "string") throw new Error(`sign-up failed: ${response.statusCode} ${response.body}`);
+        if (typeof token !== "string") throw new Error(`sign-in failed: ${response.statusCode} ${response.body}`);
         return { authorization: `Bearer ${token}` };
     }
 
@@ -69,6 +70,7 @@ export async function buildTestApp() {
 
     return {
         app,
+        auth,
         db,
         resend,
         storage,

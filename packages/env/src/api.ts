@@ -13,8 +13,8 @@ const commaList = z.string().transform((value) =>
 /**
  * Api environment.
  *
- * - DATABASE_URL and ALLOWED_EMAILS are always required. The allowlist is what keeps a public sign-up endpoint from
- *   handing strangers your Resend account.
+ * - DATABASE_URL and ALLOWED_EMAILS are always required. Only allowlisted emails can have an account, which is what
+ *   keeps strangers away from your Resend account.
  * - Secrets, Resend and R2 are required in production and optional in dev, where tests and the seeded local database
  *   run without them (storage falls back to memory, sending is disabled).
  * - Social sign-in is optional everywhere: a provider without its id is simply not offered.

@@ -1,5 +1,7 @@
+import { users } from "@repo/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { setPassword } from "../../auth";
 import { buildTestApp, OWNER, type TestHarness } from "../../test/build-app";
 
 let harness: TestHarness;
@@ -10,32 +12,43 @@ beforeAll(async () => {
 afterAll(() => harness.close());
 beforeEach(() => harness.reset());
 
-describe("sign-in", () => {
-    it("lets an allowlisted email sign up and use the session as a bearer token", async () => {
+describe("accounts", () => {
+    it("can't be created by a password sign-up, even for an allowlisted email", async () => {
+        const response = await harness.app.inject({
+            method: "POST",
+            url: "/api/auth/sign-up/email",
+            payload: { ...OWNER, name: "Not Siebe" },
+        });
+        expect(response.statusCode).toBe(400);
+        expect(await harness.db.select().from(users)).toEqual([]);
+    });
+
+    it("only exist for allowlisted emails", async () => {
+        await expect(setPassword(harness.auth, "stranger@example.com", "a long password")).rejects.toThrow(
+            "ALLOWED_EMAILS",
+        );
+    });
+
+    it("sign in with the password set on the server and use the session as a bearer token", async () => {
         const headers = await harness.signIn();
         const response = await harness.app.inject({ method: "GET", url: "/sync", headers });
         expect(response.statusCode).toBe(200);
     });
 
-    it("refuses an email that isn't on the allowlist", async () => {
-        const response = await harness.app.inject({
-            method: "POST",
-            url: "/api/auth/sign-up/email",
-            payload: { ...OWNER, email: "stranger@example.com" },
-        });
-        expect(response.statusCode).toBe(403);
-        expect(response.headers["set-auth-token"]).toBeUndefined();
+    it("are signed out everywhere when the password is set again", async () => {
+        const headers = await harness.signIn();
+        await setPassword(harness.auth, OWNER.email, "a brand new password");
+        expect((await harness.app.inject({ method: "GET", url: "/sync", headers })).statusCode).toBe(401);
+        const old = await harness.app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: OWNER });
+        expect(old.statusCode).toBe(401);
     });
 
-    it("signs in again with the same password", async () => {
-        await harness.signIn();
-        const response = await harness.app.inject({
-            method: "POST",
-            url: "/api/auth/sign-in/email",
-            payload: { email: OWNER.email, password: OWNER.password },
-        });
-        expect(response.statusCode).toBe(200);
-        expect(typeof response.headers["set-auth-token"]).toBe("string");
+    it("are shut out while their email is unverified, like one an old password sign-up made", async () => {
+        const headers = await harness.signIn();
+        await harness.db.update(users).set({ emailVerified: false });
+        expect((await harness.app.inject({ method: "GET", url: "/sync", headers })).statusCode).toBe(401);
+        const again = await harness.app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: OWNER });
+        expect(again.statusCode).toBe(403);
     });
 });
 
