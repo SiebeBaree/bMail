@@ -11,7 +11,7 @@ You need accounts at Neon, Resend, Cloudflare and [Vercel](https://vercel.com). 
 ### 1. Clone and install
 
 ```sh
-git clone https://github.com/SiebeBaree/mail.baree.be.git bmail
+git clone https://github.com/SiebeBaree/bMail.git bmail
 cd bmail
 pnpm install
 ```
@@ -69,9 +69,9 @@ Import the repository into Vercel with the root directory set to `apps/api`. Ver
 
 Then add `mail-api.example.com` under the project's domains and point its DNS where Vercel tells you. `https://mail-api.example.com/health` should answer once it's live.
 
-### 7. Sign in
+### 7. Install bMail and sign in
 
-Open bMail, enter `mail-api.example.com` as your server and sign in with the password from step 4, or with Google or Apple.
+Download the DMG from the [latest release](https://github.com/SiebeBaree/mail.baree.be/releases/latest) and drag bMail into Applications. Open it, enter `mail-api.example.com` as your server and sign in with the password from step 4, or with Google or Apple.
 
 ### 8. Add your domain
 

@@ -1,0 +1,101 @@
+name: Release
+
+# Push a tag like v0.2.0 to publish bMail 0.2.0: a signed, notarized DMG on a GitHub release. The api isn't part of
+# this; Vercel deploys it from main.
+on:
+    push:
+        tags: ["v*"]
+
+permissions:
+    contents: write
+
+jobs:
+    macos:
+        # The app targets macOS 27, so it builds with Xcode 27.
+        runs-on: xcode-27
+        defaults:
+            run:
+                working-directory: apps/macos
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - run: brew install xcodegen
+
+            - name: Version from the tag
+              run: |
+                  version="${GITHUB_REF_NAME#v}"
+                  {
+                      echo "VERSION=$version"
+                      echo "DMG=$RUNNER_TEMP/bMail-$version.dmg"
+                      echo "KEYCHAIN=$RUNNER_TEMP/signing.keychain-db"
+                  } >> "$GITHUB_ENV"
+
+            - name: Import the Developer ID certificate
+              env:
+                  CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+                  CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+              run: |
+                  password="$(openssl rand -hex 24)"
+                  security create-keychain -p "$password" "$KEYCHAIN"
+                  security set-keychain-settings -lut 3600 "$KEYCHAIN"
+                  security unlock-keychain -p "$password" "$KEYCHAIN"
+                  echo "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+                  security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+                  rm "$RUNNER_TEMP/certificate.p12"
+                  # Lets codesign use the key without a prompt nobody is there to answer.
+                  security set-key-partition-list -S apple-tool:,apple: -k "$password" "$KEYCHAIN" > /dev/null
+                  # The signature embeds the chain up to Apple's root. Both Developer ID intermediates, so a renewed
+                  # certificate from the newer one works too.
+                  for ca in DeveloperIDCA DeveloperIDG2CA; do
+                      curl -fsSL "https://www.apple.com/certificateauthority/$ca.cer" -o "$RUNNER_TEMP/$ca.cer"
+                      security import "$RUNNER_TEMP/$ca.cer" -k "$KEYCHAIN"
+                  done
+                  security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+
+            # Signing happens below rather than in Xcode: the app has no frameworks to sign first, and Xcode would
+            # otherwise want a team and profile for every package target.
+            - name: Build
+              run: |
+                  xcodegen generate
+                  xcodebuild archive -project Mail.xcodeproj -scheme Mail -configuration Release \
+                      -archivePath "$RUNNER_TEMP/bMail.xcarchive" \
+                      -skipPackagePluginValidation -skipMacroValidation \
+                      MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+                      CODE_SIGNING_ALLOWED=NO
+
+            - name: Sign and package
+              run: |
+                  app="$RUNNER_TEMP/dmg/bMail.app"
+                  mkdir "$RUNNER_TEMP/dmg"
+                  ditto "$RUNNER_TEMP/bMail.xcarchive/Products/Applications/bMail.app" "$app"
+                  codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
+                      --entitlements App/Resources/Mail.entitlements --sign "Developer ID Application" "$app"
+                  codesign --verify --strict "$app"
+                  ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
+                  diskutil image create from --format ULFO --volumeName bMail "$RUNNER_TEMP/dmg" "$DMG"
+                  codesign --timestamp --keychain "$KEYCHAIN" --sign "Developer ID Application" "$DMG"
+
+            - name: Notarize
+              env:
+                  API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+                  API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+                  API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+              run: |
+                  echo "$API_KEY" > "$RUNNER_TEMP/api-key.p8"
+                  credentials=(--key "$RUNNER_TEMP/api-key.p8" --key-id "$API_KEY_ID" --issuer "$API_ISSUER_ID")
+                  result="$(xcrun notarytool submit "$DMG" "${credentials[@]}" --wait --output-format json)"
+                  echo "$result"
+                  if [ "$(echo "$result" | jq -r .status)" != "Accepted" ]; then
+                      xcrun notarytool log "$(echo "$result" | jq -r .id)" "${credentials[@]}"
+                      exit 1
+                  fi
+                  xcrun stapler staple "$DMG"
+
+            - name: Publish
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: gh release create "$GITHUB_REF_NAME" "$DMG" --verify-tag --title "bMail $VERSION" --generate-notes
+
+            - name: Remove the signing keychain
+              if: always()
+              run: security delete-keychain "$KEYCHAIN" || true
