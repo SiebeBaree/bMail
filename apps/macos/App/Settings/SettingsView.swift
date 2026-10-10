@@ -165,7 +165,7 @@ private struct AccountsSection: View {
     private func createAddress(_ localPart: String, on domain: Domain) {
         Task {
             do {
-                let changes = try await ServerAdmin(connection: model.server)
+                let changes = try await model.admin
                     .addMailbox(localPart: localPart, displayName: localPart.capitalized, on: domain.id)
                 try model.store.merge(changes, source: "settings")
                 newAddressDomain = nil
@@ -180,7 +180,7 @@ private struct AccountsSection: View {
         Task {
             do {
                 if account.kind == .domain {
-                    try model.store.merge(try await ServerAdmin(connection: model.server).removeMailbox(account.id), source: "settings")
+                    try model.store.merge(try await model.admin.removeMailbox(account.id), source: "settings")
                 } else {
                     try model.disconnect(account)
                 }
@@ -343,11 +343,11 @@ private struct LabelsSection: View {
     private func rename(_ label: MailLabel, to name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name != label.name else { return }
-        run { try await ServerAdmin(connection: model.server).renameLabel(label.id, to: name) }
+        run { try await model.admin.renameLabel(label.id, to: name) }
     }
 
     private func delete(_ label: MailLabel) {
-        run { try await ServerAdmin(connection: model.server).deleteLabel(label.id) }
+        run { try await model.admin.deleteLabel(label.id) }
     }
 
     private func run(_ operation: @escaping () async throws -> ChangeSet) {

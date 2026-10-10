@@ -190,3 +190,12 @@ private struct NoContent: ClientTransport {
         #expect(try await admin.removeMailbox(id).removedAccountIDs == [id])
     }
 }
+
+@Suite struct ServerAddressTests {
+    @Test func readsWhatPeopleType() {
+        #expect(ServerConnection.baseURL(from: " mail-api.example.com/ ")?.absoluteString == "https://mail-api.example.com")
+        #expect(ServerConnection.baseURL(from: "http://localhost:4317")?.absoluteString == "http://localhost:4317")
+        #expect(ServerConnection.baseURL(from: "") == nil)
+        #expect(ServerConnection.baseURL(from: "ftp://example.com") == nil)
+    }
+}

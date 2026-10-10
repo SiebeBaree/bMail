@@ -106,7 +106,8 @@ final class MailPages {
 @MainActor
 enum WebPageFactory {
     static let baseURL = URL(string: "mail-asset://message/")!
-    private static var rules: WKContentRuleList?
+    /// Compiled for one api host, since the rules block its pixel too.
+    private static var rules: (apiHost: String, list: WKContentRuleList)?
     /// One store for every message, so WebKit can reuse its web content processes instead of starting fresh each time.
     private static let dataStore = WKWebsiteDataStore.nonPersistent()
 
@@ -120,7 +121,7 @@ enum WebPageFactory {
         let controller = configuration.userContentController
         let page = WebPage(configuration: configuration, navigationDecider: LinkDecider(model: model))
         Task {
-            if let rules = await trackerRules() { controller.add(rules) }
+            if let rules = await trackerRules(apiHost: model.server?.baseURL.host() ?? "") { controller.add(rules) }
             for try await event in page.load(html: html, baseURL: baseURL) where event == .committed {
                 committed()
             }
@@ -130,11 +131,11 @@ enum WebPageFactory {
 
     /// Blocks open pixels: ours on every `t.` host and the api, and the common ones other senders use. This is what keeps
     /// you from counting as an open on mail you sent to yourself.
-    private static func trackerRules() async -> WKContentRuleList? {
-        if let rules { return rules }
+    private static func trackerRules(apiHost: String) async -> WKContentRuleList? {
+        if let rules, rules.apiHost == apiHost { return rules.list }
         let patterns = [
             #"^https?://t\.[^/]+/o/"#,
-            "^https?://" + NSRegularExpression.escapedPattern(for: AppModel.serverURL.host() ?? "") + "/o/",
+            "^https?://" + NSRegularExpression.escapedPattern(for: apiHost) + "/o/",
             #"^https?://[^/]+/wf/open"#,
             #"^https?://[^/]*list-manage\.com/track/open"#,
             #"^https?://[^/]*mandrillapp\.com/track/open"#,
@@ -142,8 +143,11 @@ enum WebPageFactory {
             #"^https?://[^/]+/(e/)?(open|pixel|track(ing)?/open)[^/]*\.(gif|png)"#,
         ]
         let json = "[" + patterns.map { #"{"trigger":{"url-filter":"\#($0.replacingOccurrences(of: "\\", with: "\\\\"))"},"action":{"type":"block"}}"# }.joined(separator: ",") + "]"
-        rules = try? await WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "trackers", encodedContentRuleList: json)
-        return rules
+        guard let list = try? await WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "trackers", encodedContentRuleList: json) else {
+            return nil
+        }
+        rules = (apiHost, list)
+        return list
     }
 }
 

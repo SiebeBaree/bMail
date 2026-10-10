@@ -23,6 +23,15 @@ public final class ServerConnection: Sendable {
         return URLSession(configuration: configuration)
     }()
 
+    /// The server address someone typed, as a base url. A bare host means https. Nil when it isn't an address.
+    public static func baseURL(from text: String) -> URL? {
+        var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.contains("://") { text = "https://" + text }
+        while text.hasSuffix("/") { text.removeLast() }
+        guard let url = URL(string: text), ["http", "https"].contains(url.scheme), url.host()?.isEmpty == false else { return nil }
+        return url
+    }
+
     public convenience init(baseURL: URL) {
         self.init(baseURL: baseURL, transport: URLSessionTransport(configuration: .init(session: Self.session)))
     }
@@ -40,6 +49,13 @@ public final class ServerConnection: Sendable {
 
     public var isSignedIn: Bool { Keychain.read(Self.sessionKey) != nil }
 
+    /// Throws unless a bMail api answers at `baseURL`, so a mistyped address fails before anyone tries to sign in.
+    public func checkServer() async throws {
+        guard case .ok? = try? await client.health() else {
+            throw ProviderError(.unavailable, "No bMail server answers at \(baseURL.host() ?? baseURL.absoluteString).")
+        }
+    }
+
     public func signOut() async {
         _ = try? await authRequest("sign-out", body: [String: String]())
         Keychain.delete(Self.sessionKey)
@@ -47,10 +63,6 @@ public final class ServerConnection: Sendable {
 
     public func signIn(email: String, password: String) async throws {
         try await authenticate("sign-in/email", body: ["email": email, "password": password])
-    }
-
-    public func signUp(name: String, email: String, password: String) async throws {
-        try await authenticate("sign-up/email", body: ["name": name, "email": email, "password": password])
     }
 
     /// Hands an ID token the app got from Google or Apple to Better Auth, which verifies it and opens a session.

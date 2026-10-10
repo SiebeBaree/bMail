@@ -65,7 +65,7 @@ struct DomainsSection: View {
         Task {
             defer { isAdding = false }
             do {
-                let changes = try await ServerAdmin(connection: model.server).addDomain(name)
+                let changes = try await model.admin.addDomain(name)
                 try model.store.merge(changes, source: "settings")
                 expanded.formUnion(changes.domains.map(\.id))
                 newDomain = ""
@@ -86,8 +86,6 @@ private struct DomainRow: View {
     @Environment(AppModel.self) private var model
     @State private var isChecking = false
     @State private var isCatchAllOpen = false
-
-    private var admin: ServerAdmin { ServerAdmin(connection: model.server) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -138,7 +136,7 @@ private struct DomainRow: View {
                             ForEach(mailboxes) { mailbox in catchAllOption(mailbox.address, id: mailbox.id) }
                         }
                     }
-                    setting("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.server.baseURL.host() ?? "the api").") {
+                    setting("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.server?.baseURL.host() ?? "the api").") {
                         HStack(spacing: 6) {
                             StatusDot(domain.trackingHostVerified ? .success : .warning)
                             Text(domain.trackingHost).font(.meta)
@@ -178,7 +176,7 @@ private struct DomainRow: View {
     private func catchAllOption(_ title: String, id: Account.ID?) -> some View {
         Button {
             isCatchAllOpen = false
-            run { try await admin.setCatchAll(id, for: domain.id) }
+            run { try await model.admin.setCatchAll(id, for: domain.id) }
         } label: {
             HStack {
                 Text(title)
@@ -206,14 +204,14 @@ private struct DomainRow: View {
         isChecking = true
         Task {
             defer { isChecking = false }
-            do { try model.store.merge(try await admin.verifyDomain(domain.id), source: "settings") } catch { self.error = error.localizedDescription }
+            do { try model.store.merge(try await model.admin.verifyDomain(domain.id), source: "settings") } catch { self.error = error.localizedDescription }
         }
     }
 
     private func remove() {
         let removed = mailboxes.map(\.id)
         run {
-            var changes = try await admin.removeDomain(domain.id)
+            var changes = try await model.admin.removeDomain(domain.id)
             changes.removedAccountIDs = removed
             return changes
         }

@@ -18,7 +18,8 @@ final class AppModel {
     let store: MailStore
     let syncStatus = SyncStatus()
     let toasts = ToastCenter()
-    let server: ServerConnection
+    /// The api for your domains. Nil until you first sign in, which is where you say which server is yours.
+    private(set) var server: ServerConnection?
     @ObservationIgnored private let engine: MailSyncEngine
     @ObservationIgnored private var keyboard: KeyboardRouter?
     /// Each entry is one action, which can have changed many conversations at once.
@@ -74,9 +75,11 @@ final class AppModel {
         // The cache and the session belong to one server, so pointing the app at another starts signed out with an
         // empty cache. `--args -resetCache YES` empties it on purpose.
         let defaults = UserDefaults.standard
-        let serverChanged = defaults.string(forKey: "cacheServerURL") != Self.serverURL.absoluteString
+        // Builds from before the server step only recorded the server as the cache's, so that one carries over.
+        let serverURL = (defaults.string(forKey: "serverURL") ?? defaults.string(forKey: "cacheServerURL")).flatMap(URL.init(string:))
+        let serverChanged = defaults.string(forKey: "cacheServerURL") != serverURL?.absoluteString
         if serverChanged { Keychain.delete(ServerConnection.sessionKey) }
-        defaults.set(Self.serverURL.absoluteString, forKey: "cacheServerURL")
+        defaults.set(serverURL?.absoluteString, forKey: "cacheServerURL")
         let reset = serverChanged || defaults.bool(forKey: "resetCache")
         do {
             database = try appDatabase(reset: reset)
@@ -89,7 +92,7 @@ final class AppModel {
         }
         prepareDependencies { $0.defaultDatabase = database }
         store = MailStore(database: database)
-        server = ServerConnection(baseURL: Self.serverURL)
+        server = serverURL.map(ServerConnection.init(baseURL:))
         engine = MailSyncEngine(store: store, status: syncStatus)
         keyboard = KeyboardRouter { [weak self] command in self?.perform(command) ?? false }
         keyboard?.start()
@@ -100,14 +103,29 @@ final class AppModel {
                 Keychain.write(token, for: ServerConnection.sessionKey)
             }
         #endif
-        if server.isSignedIn { start() }
+        if server?.isSignedIn == true { start() }
     }
 
-    /// Production unless overridden for development: `open … --args -serverURL http://localhost:4317`. The app is
-    /// sandboxed, so `defaults write` from outside can't set it.
-    static var serverURL: URL {
-        UserDefaults.standard.string(forKey: "serverURL").flatMap(URL.init(string:))
-            ?? URL(string: "https://api.mail.baree.be")!
+    /// Points the app at the server typed on the sign-in screen and remembers it. The cache and the session belong to one
+    /// server, so another one starts both over. Development can skip the typing: `open … --args -serverURL <url>`.
+    @discardableResult
+    func connect(to url: URL) throws -> ServerConnection {
+        if let server, server.baseURL == url { return server }
+        try store.eraseAll()
+        Keychain.delete(ServerConnection.sessionKey)
+        UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
+        UserDefaults.standard.set(url.absoluteString, forKey: "cacheServerURL")
+        let server = ServerConnection(baseURL: url)
+        self.server = server
+        return server
+    }
+
+    /// Domain, mailbox and label changes, which go straight to your server.
+    var admin: ServerAdmin {
+        get throws {
+            guard let server else { throw ProviderError(.rejected, "Sign in to your server first.") }
+            return ServerAdmin(connection: server)
+        }
     }
 
     func start() {
@@ -119,6 +137,7 @@ final class AppModel {
 
     /// One provider for your domains plus one per Gmail account. Called again whenever accounts change.
     func configureProviders() {
+        guard let server else { return }
         var providers: [any MailProvider] = [ServerProvider(connection: server, store: store)]
         for account in accounts {
             switch account.kind {
@@ -163,7 +182,7 @@ final class AppModel {
     /// person to sign in starts clean.
     func signOut() async {
         await engine.stop()
-        await server.signOut()
+        await server?.signOut()
         for account in accounts where account.kind != .domain {
             Keychain.delete("oauth.\(account.id.uuidString)")
         }
@@ -344,7 +363,7 @@ final class AppModel {
         guard !label.name.isEmpty else { return }
         Task {
             do {
-                try store.merge(try await ServerAdmin(connection: server).createLabel(label), source: "labels")
+                try store.merge(try await admin.createLabel(label), source: "labels")
                 toggleLabel(label.id)
             } catch {
                 toasts.show(Toast("Couldn't create \(label.name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
@@ -437,7 +456,7 @@ final class AppModel {
 
     /// Downloads an attachment into Downloads and opens it. Links and Gmail's ids expire, so each open fetches fresh.
     func open(_ attachment: Attachment, of message: Message) {
-        guard let account = accounts.first(where: { $0.id == message.accountID }) else { return }
+        guard let server, let account = accounts.first(where: { $0.id == message.accountID }) else { return }
         toasts.show(Toast("Downloading \(attachment.filename)", symbol: "arrow.down.circle", duration: .seconds(3)))
         Task {
             do {

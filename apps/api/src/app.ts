@@ -41,7 +41,7 @@ declare module "fastify" {
         resend: ResendGateway;
         storage: Storage;
         trackingTokens: TrackingTokens;
-        /** The api's own origin, e.g. https://mail-api.baree.be. */
+        /** The api's own origin, e.g. https://mail-api.example.com. */
         publicUrl: string;
     }
 }

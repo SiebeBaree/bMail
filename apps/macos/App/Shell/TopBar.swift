@@ -187,11 +187,12 @@ private struct SearchField: View {
 
 private struct AccountMenu: View {
     @Environment(AppModel.self) private var model
+    @FetchAll(Account.order(by: \.position)) private var accounts
     @State private var isOpen = false
 
     var body: some View {
         Button { isOpen.toggle() } label: {
-            Avatar("Siebe Baree", size: 26)
+            Avatar(accounts.first?.displayName ?? "", size: 26)
         }
         .buttonStyle(.plain)
         .fixedSize()

@@ -1060,6 +1060,7 @@
   "paths": {
     "/health": {
       "get": {
+        "operationId": "health",
         "responses": {
           "200": {
             "description": "Default Response",
