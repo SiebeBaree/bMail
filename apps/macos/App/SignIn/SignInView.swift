@@ -23,7 +23,7 @@ struct SignInView: View {
 
     enum Field { case server, email, password }
 
-    private static let selfHostingGuide = URL(string: "https://github.com/SiebeBaree/mail.baree.be#host-your-api")!
+    private static let selfHostingGuide = URL(string: "https://github.com/SiebeBaree/bMail#host-your-api")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
