@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+/* The app's own palette (MailKit/DesignSystem/Palette.swift, dark values), so the replicas match the real thing. */
+@theme {
+    --color-canvas: #0a0a0a;
+    --color-chrome: #000000;
+    --color-raised: #111111;
+    --color-hover: #141414;
+    --color-selected: #1a1a1a;
+    --color-line: #1f1f1f;
+    --color-line-strong: #2e2e2e;
+    --color-fg: #ededed;
+    --color-fg-2: #a1a1a1;
+    --color-muted: #8f8f8f;
+    --color-faint: #6f6f6f;
+    --color-accent: #0a72ef;
+    --color-link: #52a8ff;
+    --color-success: #45a557;
+    --color-warning: #f5a623;
+    --color-danger: #e5484d;
+
+    --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+    --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+    --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+html {
+    background: var(--color-chrome);
+    color: var(--color-fg);
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+::selection {
+    background: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+/*
+ * The intro. An inline script in the layout sets data-intro="play" before first paint, so without JavaScript or with
+ * reduced motion nothing is ever hidden. The intro sets "done" and every [data-reveal] eases in after its --d delay.
+ */
+[data-reveal] {
+    transition:
+        opacity 900ms var(--ease-out-soft),
+        transform 900ms var(--ease-out-soft);
+    transition-delay: calc(var(--d, 0) * 1ms);
+}
+
+html[data-intro="play"] {
+    overflow: hidden;
+}
+
+html[data-intro="play"] [data-reveal] {
+    opacity: 0;
+    transform: translateY(16px);
+}
+
+[data-brand] {
+    transition: opacity 450ms ease-out;
+}
+
+html[data-intro="play"] [data-brand] {
+    opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0ms !important;
+        animation-duration: 0ms !important;
+    }
+}
+
+@utility dot-grid {
+    background-image: radial-gradient(circle at center, rgb(255 255 255 / 0.09) 1px, transparent 1.2px);
+    background-size: 22px 22px;
+}
+
+html:not([data-intro]) [data-intro-canvas] {
+    display: none;
+}
+
+/*
+ * The headline and its sentence stay painted under the intro's opaque canvas and only their lift waits for the reveal.
+ * Hiding them would hold back Largest Contentful Paint until the intro ends.
+ */
+html[data-intro="play"] [data-reveal="lcp"] {
+    opacity: 1;
+}

@@ -4,7 +4,7 @@ A native macOS mail client for Gmail and your own domains. Gmail syncs straight 
 
 ## This codebase
 
-Turborepo monorepo: the macOS app (`apps/macos`, Swift), a Fastify api (`apps/api`) and shared TypeScript packages under `packages/`. The api deploys on Vercel but depends on nothing Vercel-specific: Neon for Postgres, Cloudflare R2 (S3 api) for files.
+Turborepo monorepo: the macOS app (`apps/macos`, Swift), a Fastify api (`apps/api`), the Next.js marketing site (`apps/web`) and shared TypeScript packages under `packages/`. The api deploys on Vercel but depends on nothing Vercel-specific: Neon for Postgres, Cloudflare R2 (S3 api) for files.
 
 ## Principles
 
@@ -62,6 +62,7 @@ Run it against a local api: start the api (`PORT=4317 PUBLIC_URL=http://localhos
 - Production api logs are plain JSON on stdout. Never add a log shipper to the code.
 - Builds without an environment use `SKIP_ENV_VALIDATION=1`. Never weaken a required env var to make a build pass.
 - Formatting is oxfmt's job from the repo root. Lint rules live in `@repo/oxlint-config`.
+- The site's screenshots are live React replicas of the app's views with fake mail (`apps/web/components/demo`). When a view in the app changes visibly, change its replica too.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

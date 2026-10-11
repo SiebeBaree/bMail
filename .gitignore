@@ -14,3 +14,7 @@ apps/macos/*.xcodeproj
 apps/macos/.swiftpm
 apps/macos/MailKit/.build
 DerivedData
+
+# Next.js
+.next
+next-env.d.ts

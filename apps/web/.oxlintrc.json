@@ -1,0 +1,7 @@
+{
+    "extends": ["../../packages/oxlint-config/base.json"],
+    "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "react", "nextjs", "jsx-a11y"],
+    "rules": {
+        "react/react-in-jsx-scope": "off"
+    }
+}
