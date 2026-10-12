@@ -1,0 +1,71 @@
+# XcodeGen spec for bMail on iPhone. The .xcodeproj is generated (and gitignored): run `xcodegen` in apps/ios after
+# pulling. Everything below the views comes from the MailKit package the Mac app uses too.
+name: Mail
+options:
+  bundleIdPrefix: be.baree
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: DW92YAHZVK
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  MailKit:
+    path: ../macos/MailKit
+targets:
+  Mail:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      # One icon for both apps.
+      - path: ../macos/App/Resources/AppIcon.icon
+        buildPhase: resources
+    # Custom keys only; everything standard comes from GENERATE_INFOPLIST_FILE.
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        GoogleClientID: $(GOOGLE_CLIENT_ID)
+    dependencies:
+      - package: MailKit
+        product: DesignSystem
+      - package: MailKit
+        product: MailCore
+      - package: MailKit
+        product: Providers
+      - package: MailKit
+        product: MailUI
+    settings:
+      base:
+        PRODUCT_NAME: bMail
+        PRODUCT_MODULE_NAME: MailApp
+        # The Mac app's id: one App ID, so Sign in with Apple and the Google client below work for both.
+        PRODUCT_BUNDLE_IDENTIFIER: be.baree.mail
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: App/Resources/Mail.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_CFBundleDisplayName: bMail
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_NSHumanReadableCopyright: "© 2026 Siebe Baree"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # Google OAuth client id. Not a secret: an iOS-type public client for bundle id be.baree.mail, using PKCE.
+        GOOGLE_CLIENT_ID: "120617231468-9n56accj81imqh2a7638n8hsstlfad5e.apps.googleusercontent.com"
+schemes:
+  Mail:
+    build:
+      targets:
+        Mail: all
+    run:
+      config: Debug
+    archive:
+      config: Release

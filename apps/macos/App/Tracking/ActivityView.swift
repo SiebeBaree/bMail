@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 
 /// What happened to a message you sent: delivery, then every open and click, people and machines apart. Machines are
@@ -160,43 +161,5 @@ private struct LinkTable: View {
 
     private func label(people: Int, machines: Int) -> String {
         machines > 0 ? "\(people) · \(machines) scanner" : "\(people)"
-    }
-}
-
-extension MessageEvent.Kind {
-    var title: String {
-        switch self {
-        case .sent: "Sent"
-        case .delivered: "Delivered"
-        case .delayed: "Delayed"
-        case .bounced: "Bounced"
-        case .complained: "Spam report"
-        case .failed: "Failed"
-        case .opened: "Opened"
-        case .clicked: "Clicked"
-        }
-    }
-
-    var isFailure: Bool { [.bounced, .complained, .failed].contains(self) }
-}
-
-extension MessageEvent {
-    /// The rest of the row: where, on what, and for machines, which machine.
-    var summary: String {
-        switch source {
-        case .appleProxy: return "Apple privacy proxy, on delivery"
-        case .googleProxy: return "Gmail, location hidden by Google"
-        case .scanner:
-            if kind == .opened { return "Security scanner, on delivery" }
-            return [url.flatMap(URL.init(string:)).map(Self.short), "link scanner"].compactMap(\.self).joined(separator: " · ")
-        case .person, nil:
-            let place = [city, country].compactMap(\.self).joined(separator: ", ")
-            let parts = [url.flatMap(URL.init(string:)).map(Self.short), device, place.isEmpty ? nil : place, detail]
-            return parts.compactMap(\.self).joined(separator: " · ")
-        }
-    }
-
-    private static func short(_ url: URL) -> String {
-        (url.host() ?? "") + (url.path() == "/" ? "" : url.path())
     }
 }

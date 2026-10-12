@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import MailCore
+import MailUI
 import SQLiteData
 import SwiftUI
 
@@ -45,7 +46,7 @@ struct ConversationList: View {
         .task(id: request) { await query.load(request) }
         .onChange(of: query.conversations.map(\.id), initial: true) { _, ids in model.listOrder = ids }
         .onChange(of: [model.selection], initial: true) { _, _ in
-            model.pages.prefetch(around: model.selection, in: model.listOrder, dark: colorScheme == .dark)
+            model.session.pages.prefetch(around: model.selection, in: model.listOrder, dark: colorScheme == .dark)
         }
     }
 }
@@ -95,7 +96,7 @@ final class ConversationQuery {
 }
 
 private struct EmptyList: View {
-    let tab: Tab
+    let tab: MailTab
     let isSearching: Bool
     let isLabel: Bool
 

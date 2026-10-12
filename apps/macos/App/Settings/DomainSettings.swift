@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import Providers
 import SQLiteData
 import SwiftUI
@@ -65,8 +66,8 @@ struct DomainsSection: View {
         Task {
             defer { isAdding = false }
             do {
-                let changes = try await model.admin.addDomain(name)
-                try model.store.merge(changes, source: "settings")
+                let changes = try await model.session.admin.addDomain(name)
+                try model.session.store.merge(changes, source: "settings")
                 expanded.formUnion(changes.domains.map(\.id))
                 newDomain = ""
                 error = nil
@@ -136,7 +137,7 @@ private struct DomainRow: View {
                             ForEach(mailboxes) { mailbox in catchAllOption(mailbox.address, id: mailbox.id) }
                         }
                     }
-                    setting("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.server?.baseURL.host() ?? "the api").") {
+                    setting("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.session.server?.baseURL.host() ?? "the api").") {
                         HStack(spacing: 6) {
                             StatusDot(domain.trackingHostVerified ? .success : .warning)
                             Text(domain.trackingHost).font(.meta)
@@ -176,7 +177,7 @@ private struct DomainRow: View {
     private func catchAllOption(_ title: String, id: Account.ID?) -> some View {
         Button {
             isCatchAllOpen = false
-            run { try await model.admin.setCatchAll(id, for: domain.id) }
+            run { try await model.session.admin.setCatchAll(id, for: domain.id) }
         } label: {
             HStack {
                 Text(title)
@@ -192,7 +193,7 @@ private struct DomainRow: View {
     private func run(_ operation: @escaping () async throws -> ChangeSet) {
         Task {
             do {
-                try model.store.merge(try await operation(), source: "settings")
+                try model.session.store.merge(try await operation(), source: "settings")
                 error = nil
             } catch {
                 self.error = error.localizedDescription
@@ -204,14 +205,14 @@ private struct DomainRow: View {
         isChecking = true
         Task {
             defer { isChecking = false }
-            do { try model.store.merge(try await model.admin.verifyDomain(domain.id), source: "settings") } catch { self.error = error.localizedDescription }
+            do { try model.session.store.merge(try await model.session.admin.verifyDomain(domain.id), source: "settings") } catch { self.error = error.localizedDescription }
         }
     }
 
     private func remove() {
         let removed = mailboxes.map(\.id)
         run {
-            var changes = try await model.admin.removeDomain(domain.id)
+            var changes = try await model.session.admin.removeDomain(domain.id)
             changes.removedAccountIDs = removed
             return changes
         }
@@ -256,43 +257,5 @@ private struct RecordTable: View {
             }
         }
         .font(.geist(12.5))
-    }
-}
-
-extension Domain.Status {
-    var label: String {
-        switch self {
-        case .pending: "Waiting for DNS"
-        case .verified: "Verified"
-        case .failed: "DNS check failed"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .verified: .success
-        case .pending: .warning
-        case .failed: .danger
-        }
-    }
-}
-
-extension DNSRecord.Status {
-    var label: String {
-        switch self {
-        case .pending: "Pending"
-        case .verified: "Verified"
-        case .failed: "Failed"
-        case .optional: "Recommended"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .verified: .success
-        case .pending: .warning
-        case .failed: .danger
-        case .optional: .textFaint
-        }
     }
 }

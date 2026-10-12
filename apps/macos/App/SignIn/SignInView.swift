@@ -2,6 +2,7 @@ import AuthenticationServices
 import CryptoKit
 import DesignSystem
 import MailCore
+import MailUI
 import Providers
 import SwiftUI
 
@@ -29,7 +30,7 @@ struct SignInView: View {
         VStack(alignment: .leading, spacing: 16) {
             LogoMark(size: 36)
                 .padding(.bottom, 8)
-            if let server = model.server, !isChangingServer {
+            if let server = model.session.server, !isChangingServer {
                 signIn(to: server)
             } else {
                 serverStep
@@ -38,7 +39,7 @@ struct SignInView: View {
         .frame(width: 340)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.canvas)
-        .onAppear { if model.server == nil { focus = .server } }
+        .onAppear { if model.session.server == nil { focus = .server } }
     }
 
     @ViewBuilder private var serverStep: some View {
@@ -147,7 +148,7 @@ struct SignInView: View {
             defer { isWorking = false }
             do {
                 try await ServerConnection(baseURL: url).checkServer()
-                try model.connect(to: url)
+                try model.session.connect(to: url)
                 isChangingServer = false
                 focus = .email
             } catch {
@@ -157,14 +158,14 @@ struct SignInView: View {
     }
 
     private func run(_ signIn: @escaping (ServerConnection) async throws -> Void) {
-        guard let server = model.server else { return }
+        guard let server = model.session.server else { return }
         isWorking = true
         error = nil
         Task {
             defer { isWorking = false }
             do {
                 try await signIn(server)
-                model.start()
+                model.session.start()
             } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
                 return
             } catch {

@@ -1,5 +1,10 @@
-import AppKit
 import SwiftUI
+
+#if os(macOS)
+    import AppKit
+#else
+    import UIKit
+#endif
 
 /// Vercel's palette as semantic tokens. Every color has a dark and a light value and follows the window's appearance,
 /// so views never check the color scheme themselves.
@@ -30,22 +35,41 @@ extension Color {
     public static let onInverted = adaptive(dark: 0x0A0A0A, light: 0xFFFFFF)
 
     private static func adaptive(dark: UInt32, light: UInt32) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
-        })
+        #if os(macOS)
+            Color(nsColor: NSColor(name: nil) { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
+            })
+        #else
+            Color(uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light)
+            })
+        #endif
     }
 }
 
-extension NSColor {
-    convenience init(hex: UInt32) {
-        self.init(
-            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
-        )
+#if os(macOS)
+    extension NSColor {
+        convenience init(hex: UInt32) {
+            self.init(
+                srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
+        }
     }
-}
+#else
+    extension UIColor {
+        convenience init(hex: UInt32) {
+            self.init(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
+        }
+    }
+#endif
 
 /// Spacing, radii and motion. A 4 point grid; radius grows with the size of the thing.
 public enum Metrics {

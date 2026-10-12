@@ -1,6 +1,7 @@
 import AppKit
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 import WebKit
 
@@ -13,7 +14,7 @@ struct MailWebView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        MailPageView(entry: model.pages.entry(for: message, dark: colorScheme == .dark))
+        MailPageView(entry: model.session.pages.entry(for: message, dark: colorScheme == .dark))
     }
 }
 

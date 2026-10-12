@@ -9,8 +9,9 @@ node_modules
 
 # Xcode
 apps/macos/build
-# Generated from apps/macos/project.yml by XcodeGen
+# Generated from each app's project.yml by XcodeGen
 apps/macos/*.xcodeproj
+apps/ios/*.xcodeproj
 apps/macos/.swiftpm
 apps/macos/MailKit/.build
 DerivedData

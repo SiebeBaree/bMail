@@ -1,3 +1,4 @@
+import MailUI
 import SwiftUI
 
 /// The menu bar. Every command is here so it can be found by browsing; single-key shortcuts are shown in the palette
@@ -18,7 +19,7 @@ struct MenuCommands: Commands {
             Divider()
             Button("All Accounts") { model.perform(.allAccounts) }
                 .keyboardShortcut("0")
-            ForEach(Array(model.accounts.prefix(9).enumerated()), id: \.element.id) { index, account in
+            ForEach(Array(model.session.accounts.prefix(9).enumerated()), id: \.element.id) { index, account in
                 Button(account.address) { model.perform(.account(index + 1)) }
                     .keyboardShortcut(KeyEquivalent(Character(String(index + 1))))
             }
@@ -29,7 +30,7 @@ struct MenuCommands: Commands {
             }
         }
         CommandMenu("Go") {
-            ForEach(Tab.allCases) { tab in
+            ForEach(MailTab.allCases) { tab in
                 Button(tab.title) { model.perform(.go(tab)) }
             }
         }

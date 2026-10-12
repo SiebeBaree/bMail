@@ -1,14 +1,16 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
-// Everything below the views lives here, so it builds and tests with `swift test` without the app target.
+// Everything below the views lives here, shared by the Mac and iPhone apps, so it builds and tests with `swift test`
+// without either app target.
 let package = Package(
     name: "MailKit",
-    platforms: [.macOS("27.0")],
+    platforms: [.macOS("27.0"), .iOS("27.0")],
     products: [
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "MailCore", targets: ["MailCore"]),
         .library(name: "Providers", targets: ["Providers"]),
+        .library(name: "MailUI", targets: ["MailUI"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
@@ -47,7 +49,17 @@ let package = Package(
                 .product(name: "HTTPTypes", package: "swift-http-types"),
             ]
         ),
+        .target(
+            name: "MailUI",
+            dependencies: [
+                "DesignSystem",
+                "MailCore",
+                "Providers",
+                .product(name: "SQLiteData", package: "sqlite-data"),
+            ]
+        ),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
+        .testTarget(name: "MailUITests", dependencies: ["MailUI", "MailCore"]),
         .testTarget(
             name: "ProvidersTests",
             dependencies: [

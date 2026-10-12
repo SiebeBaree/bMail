@@ -1,3 +1,4 @@
+import MailUI
 import SwiftUI
 
 /// The one keymap. Key handling, the ⌘K palette, the shortcut sheet and the menu bar all read from it, so a shortcut
@@ -8,14 +9,14 @@ enum Command: Hashable, CaseIterable, Identifiable {
     case toggleCheck, extendNext, extendPrevious, checkAll
     case compose, reply, replyAll, forward
     case search, palette, shortcuts, settings
-    case go(Tab)
+    case go(MailTab)
     case allAccounts, account(Int)
 
     static let allCases: [Command] =
         [.next, .previous, .back, .toggleCheck, .extendNext, .extendPrevious, .checkAll, .markDone, .trash, .spam,
          .toggleStar, .toggleRead, .label, .unsubscribe, .undo, .compose, .reply, .replyAll, .forward, .search, .palette,
          .shortcuts, .settings]
-        + Tab.allCases.map(Command.go)
+        + MailTab.allCases.map(Command.go)
         + [.allAccounts] + (1...9).map(Command.account)
 
     var id: Self { self }
@@ -165,36 +166,7 @@ enum Command: Hashable, CaseIterable, Identifiable {
     }
 }
 
-/// The views across the top. Each one is a query over conversations, not a folder on its own.
-enum Tab: String, CaseIterable, Identifiable {
-    case inbox, starred, sent, done, tracked, spam, trash
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .inbox: "Inbox"
-        case .starred: "Starred"
-        case .sent: "Sent"
-        case .done: "Done"
-        case .tracked: "Tracked"
-        case .spam: "Spam"
-        case .trash: "Trash"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .inbox: "tray"
-        case .starred: "star"
-        case .sent: "paperplane"
-        case .done: "checkmark"
-        case .tracked: "waveform.path.ecg"
-        case .spam: "exclamationmark.octagon"
-        case .trash: "trash"
-        }
-    }
-
+extension MailTab {
     /// The second key of `G` then this.
     var key: Character {
         switch self {
@@ -207,7 +179,4 @@ enum Tab: String, CaseIterable, Identifiable {
         case .trash: "#"
         }
     }
-
-    /// Spam and trash stay out of the tab bar; you reach them with G ! and G #.
-    static let visible: [Tab] = [.inbox, .starred, .sent, .done, .tracked]
 }

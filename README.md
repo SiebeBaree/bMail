@@ -1,6 +1,6 @@
 # bMail
 
-A native macOS mail client for Gmail and your own domains. Every view reads a local cache and every action lands there first, so nothing waits on the network.
+A native mail client for Mac and iPhone, for Gmail and your own domains. Every view reads a local cache and every action lands there first, so nothing waits on the network.
 
 Gmail syncs straight from the app. Your own domains go through a small api that you host yourself. It sends and receives through [Resend](https://resend.com), keeps mail in Postgres on [Neon](https://neon.tech), stores attachments in [Cloudflare R2](https://developers.cloudflare.com/r2/) and serves open and click tracking. There is no shared bMail server. The app asks for your api's address when you sign in.
 
@@ -36,7 +36,7 @@ pnpm db:migrate
 pnpm --filter api password you@example.com
 ```
 
-This prints a password. Put it in your password manager. Running it again replaces the password and signs out every Mac that was signed in, which is also how you recover a lost one.
+This prints a password. Put it in your password manager. Running it again replaces the password and signs out every device that was signed in, which is also how you recover a lost one.
 
 Skip this step if you'll only sign in with Google or Apple.
 
@@ -91,12 +91,12 @@ Anyone else who finds your api gets nowhere, even if they know your email.
 You need Xcode 27 and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
 ```sh
-cd apps/macos
+cd apps/macos   # or apps/ios for the iPhone app
 xcodegen
 open Mail.xcodeproj
 ```
 
-`apps/macos/project.yml` is the source of truth for the Xcode project. Before building, set `DEVELOPMENT_TEAM` to your own team and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id you own. Gmail and Google sign-in need an iOS-type Google OAuth client for that bundle id. Put its id in `GOOGLE_CLIENT_ID` in `project.yml` and on your api.
+Each app's `project.yml` is the source of truth for its Xcode project. Before building, set `DEVELOPMENT_TEAM` to your own team and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id you own, the same one in both. Gmail and Google sign-in need an iOS-type Google OAuth client for that bundle id. Put its id in `GOOGLE_CLIENT_ID` in both `project.yml` files and on your api.
 
 ## Develop
 

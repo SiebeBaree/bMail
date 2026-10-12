@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SQLiteData
 import SwiftUI
 
@@ -37,8 +38,8 @@ struct TabBar: View {
     }
 
     /// Spam and trash join the bar only while you're in them.
-    private var tabs: [Tab] {
-        Tab.visible.contains(model.tab) ? Tab.visible : Tab.visible + [model.tab]
+    private var tabs: [MailTab] {
+        MailTab.visible.contains(model.tab) ? MailTab.visible : MailTab.visible + [model.tab]
     }
 }
 
@@ -78,13 +79,13 @@ private struct SyncLabel: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 5)) { context in
             Group {
-                if !model.syncStatus.failing.isEmpty {
+                if !model.session.syncStatus.failing.isEmpty {
                     HStack(spacing: 6) {
                         StatusDot(.warning)
-                        Text(model.syncStatus.isOffline ? "Offline" : "Sync failed")
+                        Text(model.session.syncStatus.isOffline ? "Offline" : "Sync failed")
                     }
-                    .help(model.syncStatus.failing.values.map(\.message).sorted().joined(separator: "\n"))
-                } else if let date = model.syncStatus.lastSyncedAt {
+                    .help(model.session.syncStatus.failing.values.map(\.message).sorted().joined(separator: "\n"))
+                } else if let date = model.session.syncStatus.lastSyncedAt {
                     Text("Synced \(relative(date, now: context.date))")
                 } else {
                     Text("Syncing")

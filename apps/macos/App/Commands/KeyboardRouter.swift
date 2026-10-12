@@ -1,4 +1,5 @@
 import AppKit
+import MailUI
 
 /// Turns key presses into commands, Superhuman style: single keys, `G` sequences and nothing while you type. Commands
 /// with ⌘ go through the menu bar instead, so they show up there.
@@ -44,7 +45,7 @@ final class KeyboardRouter {
 
         if let started = pendingG, Date().timeIntervalSince(started) < 1.2 {
             pendingG = nil
-            guard let tab = Tab.allCases.first(where: { $0.key == typed }) else { return false }
+            guard let tab = MailTab.allCases.first(where: { $0.key == typed }) else { return false }
             return perform(.go(tab))
         }
         if typed == "g" {

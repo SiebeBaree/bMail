@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 
 /// Addresses as tokens. Type and press Return, Tab or a comma to add one; Backspace on an empty field removes the last.
@@ -39,7 +40,7 @@ struct RecipientField: View {
                             input.removeLast()
                             commit(suggestion: nil)
                         } else {
-                            suggestions = (try? app.store.contacts(matching: text.trimmingCharacters(in: .whitespaces))) ?? []
+                            suggestions = (try? app.session.store.contacts(matching: text.trimmingCharacters(in: .whitespaces))) ?? []
                             if text.isEmpty { suggestions = [] }
                             highlighted = 0
                         }
@@ -131,50 +132,5 @@ private struct Suggestions: View {
         .background(Color.raised, in: .rect(cornerRadius: Metrics.popoverRadius))
         .overlay(RoundedRectangle(cornerRadius: Metrics.popoverRadius).strokeBorder(Color.lineStrong))
         .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
-    }
-}
-
-/// Lays children out left to right and wraps, like words. Used for recipient tokens.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(subviews, width: proposal.width ?? .infinity)
-        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(0, rows.count - 1)))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var y = bounds.minY
-        for row in arrange(subviews, width: bounds.width) {
-            var x = bounds.minX
-            for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                let isLast = index == subviews.count - 1
-                let width = isLast ? max(size.width, bounds.maxX - x) : size.width
-                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(width: width, height: size.height))
-                x += width + spacing
-            }
-            y += row.height + spacing
-        }
-    }
-
-    private struct Row {
-        var indices: [Int] = []
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-    }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
-        var rows = [Row()]
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            if let last = rows.last, !last.indices.isEmpty, last.width + spacing + size.width > width {
-                rows.append(Row())
-            }
-            rows[rows.count - 1].indices.append(index)
-            rows[rows.count - 1].width += (rows[rows.count - 1].indices.count > 1 ? spacing : 0) + size.width
-            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-        }
-        return rows
     }
 }

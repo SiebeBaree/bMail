@@ -52,3 +52,12 @@ jobs:
                   xcodebuild -project Mail.xcodeproj -scheme Mail -configuration Debug \
                       -skipPackagePluginValidation -skipMacroValidation \
                       CODE_SIGNING_ALLOWED=NO build
+
+            - name: Build the iPhone app
+              working-directory: apps/ios
+              run: |
+                  xcodegen generate
+                  xcodebuild -project Mail.xcodeproj -scheme Mail -configuration Debug \
+                      -destination 'generic/platform=iOS Simulator' \
+                      -skipPackagePluginValidation -skipMacroValidation \
+                      CODE_SIGNING_ALLOWED=NO build
