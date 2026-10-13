@@ -34,7 +34,7 @@ final class ComposerModel {
     let mode: Mode
     /// The existing conversation for a reply, a fresh one for anything else.
     let conversationID: Conversation.ID
-    let messageID: Message.ID
+    let messageID = UUID()
     /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
     var accountID: Account.ID? {
         didSet {
@@ -58,12 +58,11 @@ final class ComposerModel {
 
     @ObservationIgnored private weak var app: AppModel?
 
-    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID, messageID: Message.ID = UUID()) {
+    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID) {
         self.app = app
         self.accounts = app.session.accounts
         self.mode = mode
         self.conversationID = conversationID
-        self.messageID = messageID
     }
 
     /// New mail and forwards take the reader's place; replies open under the conversation they answer.
@@ -111,22 +110,6 @@ final class ComposerModel {
         model.quoted = response.quote
         model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
         model.showsQuote = mode == .forward
-        return model
-    }
-
-    /// Brings a message back after Undo send, exactly as it was.
-    static func reopen(_ message: OutgoingMessage, app: AppModel) -> ComposerModel {
-        let isReply = !app.session.conversations([message.conversationID]).isEmpty
-        let model = ComposerModel(app: app, mode: isReply ? .reply : .new, conversationID: message.conversationID, messageID: message.id)
-        model.accountID = message.accountID
-        model.to = message.to
-        model.cc = message.cc
-        model.bcc = message.bcc
-        model.showsCopies = !message.cc.isEmpty || !message.bcc.isEmpty
-        model.subject = message.subject
-        model.body = AttributedString(message.text)
-        model.trackingEnabled = message.trackingEnabled
-        model.attachments = message.attachments
         return model
     }
 
@@ -189,6 +172,6 @@ final class ComposerModel {
             attachments: attachments
         )
         app?.composer = nil
-        app?.send(message)
+        app?.send(message, from: self)
     }
 }

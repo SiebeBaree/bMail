@@ -52,7 +52,7 @@ struct AttachmentList: View {
     /// nothing keeps a copy for longer.
     private func open(_ file: Attachment) {
         let folder = URL.cachesDirectory.appending(path: "Attachments/\(file.id.uuidString)", directoryHint: .isDirectory)
-        let destination = folder.appending(path: file.filename.isEmpty ? "Attachment" : file.filename)
+        let destination = folder.appending(path: file.savedName, directoryHint: .notDirectory)
         if FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) {
             preview = destination
             return

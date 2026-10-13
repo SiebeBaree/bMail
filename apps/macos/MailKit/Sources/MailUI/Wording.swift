@@ -141,6 +141,15 @@ extension DNSRecord.Status {
     }
 }
 
+extension Attachment {
+    /// The name to save it under. The sender picks `filename`, so only its last component counts and "../" can't put
+    /// the file anywhere else.
+    public var savedName: String {
+        let name = (filename as NSString).lastPathComponent
+        return ["", ".", "..", "/"].contains(name) ? "Attachment" : name
+    }
+}
+
 extension Toast {
     /// What the sync engine reports, as the toast you see.
     public init(_ notice: SyncStatus.Notice) {

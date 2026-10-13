@@ -203,11 +203,9 @@ final class AppModel {
 
     // MARK: - Sending
 
-    func send(_ message: OutgoingMessage) {
-        session.send(message) { [weak self] message in
-            guard let self else { return }
-            self.composer = ComposerModel.reopen(message, app: self)
-        }
+    /// Undo brings back the composer the message came from, exactly as it was.
+    func send(_ message: OutgoingMessage, from composer: ComposerModel) {
+        session.send(message) { [weak self] in self?.composer = composer }
     }
 
     // MARK: - Attachments
@@ -217,7 +215,7 @@ final class AppModel {
         session.toasts.show(Toast("Downloading \(attachment.filename)", symbol: "arrow.down.circle", duration: .seconds(3)))
         Task {
             do {
-                let destination = URL.downloadsDirectory.appending(path: attachment.filename)
+                let destination = URL.downloadsDirectory.appending(path: attachment.savedName, directoryHint: .notDirectory)
                 try await session.download(attachment, of: message).write(to: destination, options: .atomic)
                 NSWorkspace.shared.open(destination)
             } catch {

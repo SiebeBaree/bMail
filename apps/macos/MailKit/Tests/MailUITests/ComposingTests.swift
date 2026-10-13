@@ -58,6 +58,21 @@ import Testing
         #expect(try String(contentsOf: first.fileURL, encoding: .utf8) == "one")
     }
 
+    @Test func aQuotedSendersNameCantAddMarkup() throws {
+        let last = message(from: Address(name: "<img src=x>", email: "tom@northfund.vc"), to: [me], subject: "Hi")
+        let quote = try #require(Response(to: [last], mode: .reply, ownAddresses: [])).quote
+        #expect(!quote.appendix.html.contains("<img"))
+        #expect(quote.appendix.text.contains("<img src=x>"))
+    }
+
+    @Test func attachmentsSaveUnderTheirLastPathComponent() {
+        let named = { Attachment(id: UUID(), filename: $0, contentType: "text/plain", size: 1, contentID: nil).savedName }
+        #expect(named("../../Library/evil.plist") == "evil.plist")
+        #expect(named("..") == "Attachment")
+        #expect(named("") == "Attachment")
+        #expect(named("Invoice 2026.pdf") == "Invoice 2026.pdf")
+    }
+
     private func message(from: Address, to: [Address], cc: [Address] = [], direction: Direction = .inbound, subject: String) -> Message {
         Message(
             id: UUID(), conversationID: UUID(), accountID: UUID(), direction: direction, deliveryStatus: nil,

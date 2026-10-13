@@ -62,7 +62,7 @@ public struct Quote: Equatable, Sendable {
     /// What goes after your own words in each part of the message.
     public var appendix: (html: String, text: String) {
         (
-            #"<br><div>\#(header)</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">\#(html)</blockquote>"#,
+            #"<br><div>\#(BodySerializer.escape(header))</div><blockquote style="margin:0 0 0 .8ex;border-left:1px solid #ccc;padding-left:1ex">\#(html)</blockquote>"#,
             "\n\n\(header)\n" + text.split(separator: "\n", omittingEmptySubsequences: false).map { "> \($0)" }.joined(separator: "\n")
         )
     }
@@ -81,12 +81,12 @@ public struct BodySerializer {
     public func render(_ body: AttributedString) -> (html: String, text: String) {
         var html = ""
         for run in body.runs {
-            var fragment = escape(String(body[run.range].characters))
+            var fragment = Self.escape(String(body[run.range].characters))
             let resolved = run.font?.resolve(in: context)
             if resolved?.isBold == true { fragment = "<strong>\(fragment)</strong>" }
             if resolved?.isItalic == true { fragment = "<em>\(fragment)</em>" }
             if run.underlineStyle != nil, run.link == nil { fragment = "<u>\(fragment)</u>" }
-            if let link = run.link { fragment = #"<a href="\#(escape(link.absoluteString))">\#(fragment)</a>"# }
+            if let link = run.link { fragment = #"<a href="\#(Self.escape(link.absoluteString))">\#(fragment)</a>"# }
             html += fragment
         }
         let paragraphs = html
@@ -96,7 +96,7 @@ public struct BodySerializer {
         return (#"<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6">\#(paragraphs)</div>"#, String(body.characters))
     }
 
-    private func escape(_ text: String) -> String {
+    static func escape(_ text: String) -> String {
         text
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")

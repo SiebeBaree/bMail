@@ -346,8 +346,9 @@ public final class MailSession {
     /// How long a message waits before it goes, so Undo can still take it back.
     public static let undoWindow = 10
 
-    /// Holds the message for the undo window, then the sync engine sends it. Undo hands it to `reopen` as it was.
-    public func send(_ message: OutgoingMessage, reopen: @escaping @MainActor (OutgoingMessage) -> Void) {
+    /// Holds the message for the undo window, then the sync engine sends it. Undo takes it out of the outbox and calls
+    /// `reopen`, which brings back the composer it came from.
+    public func send(_ message: OutgoingMessage, reopen: @escaping @MainActor () -> Void) {
         do {
             try store.enqueue(message, sendAt: Date().addingTimeInterval(TimeInterval(Self.undoWindow)))
             engine.wake()
@@ -369,12 +370,12 @@ public final class MailSession {
         }
     }
 
-    private func cancelSend(_ id: Message.ID, reopen: @MainActor (OutgoingMessage) -> Void) {
-        guard let message = try? store.cancelSend(id) else {
+    private func cancelSend(_ id: Message.ID, reopen: @MainActor () -> Void) {
+        guard (try? store.cancelSend(id)) != nil else {
             toasts.show(Toast("Too late, it's already on its way.", symbol: "paperplane"))
             return
         }
-        reopen(message)
+        reopen()
     }
 
     // MARK: - Reading

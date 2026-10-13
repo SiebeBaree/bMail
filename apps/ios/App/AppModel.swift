@@ -108,18 +108,17 @@ final class AppModel {
         sheet = .composer(composer)
     }
 
-    /// Holds the message for the undo window. Undo opens it again in a composer, exactly as it was, unless you're
-    /// writing something else by then: it waits until that one closes.
-    func send(_ message: OutgoingMessage) {
+    /// Holds the message for the undo window. Undo brings back the composer it came from, exactly as it was, unless
+    /// you're writing something else by then: it waits until that one closes.
+    func send(_ message: OutgoingMessage, from composer: ComposerModel) {
         Haptics.success()
-        session.send(message) { [weak self] message in
+        session.send(message) { [weak self] in
             guard let self else { return }
             Haptics.tap()
-            let reopened = ComposerModel.reopen(message, app: self)
             if case let .composer(current) = self.sheet, current.hasContent {
-                self.waitingToReopen = reopened
+                self.waitingToReopen = composer
             } else {
-                self.sheet = .composer(reopened)
+                self.sheet = .composer(composer)
             }
         }
     }

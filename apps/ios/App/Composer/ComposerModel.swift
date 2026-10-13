@@ -17,7 +17,7 @@ final class ComposerModel: Identifiable {
     let mode: Mode
     /// The existing conversation for a reply, a fresh one for anything else.
     let conversationID: Conversation.ID
-    let messageID: Message.ID
+    let messageID = UUID()
     /// Read once when the composer opens: the session's list is a database read on every access.
     let accounts: [Account]
     /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
@@ -48,12 +48,11 @@ final class ComposerModel: Identifiable {
 
     enum RecipientKind: Hashable { case to, cc, bcc }
 
-    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID, messageID: Message.ID = UUID()) {
+    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID) {
         self.app = app
         self.accounts = app.session.accounts
         self.mode = mode
         self.conversationID = conversationID
-        self.messageID = messageID
     }
 
     var account: Account? { accounts.first { $0.id == accountID } }
@@ -108,22 +107,6 @@ final class ComposerModel: Identifiable {
         model.quoted = response.quote
         model.showsQuote = mode == .forward
         model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
-        return model
-    }
-
-    /// Brings a message back after Undo send, exactly as it was.
-    static func reopen(_ message: OutgoingMessage, app: AppModel) -> ComposerModel {
-        let isReply = !app.session.conversations([message.conversationID]).isEmpty
-        let model = ComposerModel(app: app, mode: isReply ? .response(.reply) : .new, conversationID: message.conversationID, messageID: message.id)
-        model.accountID = message.accountID
-        model.to = message.to
-        model.cc = message.cc
-        model.bcc = message.bcc
-        model.showsCopies = !message.cc.isEmpty || !message.bcc.isEmpty
-        model.subject = message.subject
-        model.body = AttributedString(message.text)
-        model.trackingEnabled = message.trackingEnabled
-        model.attachments = message.attachments
         return model
     }
 
@@ -210,7 +193,7 @@ final class ComposerModel: Identifiable {
             attachments: attachments
         )
         app?.sheet = nil
-        app?.send(message)
+        app?.send(message, from: self)
         return true
     }
 }
