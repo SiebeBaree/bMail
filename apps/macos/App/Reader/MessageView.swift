@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 
 struct MessageView: View {
@@ -50,7 +51,7 @@ struct MessageView: View {
     }
 
     private var recipients: String {
-        let own = Set(model.accounts.map { $0.address.lowercased() })
+        let own = Set(model.session.accounts.map { $0.address.lowercased() })
         let names = (message.to + message.cc).map { own.contains($0.email.lowercased()) ? "you" : $0.displayName }
         return "to " + ListFormatter.localizedString(byJoining: names)
     }
@@ -76,32 +77,12 @@ private struct DeliveryLabel: View {
     var body: some View {
         if message.direction == .outbound, let status = message.deliveryStatus {
             HStack(spacing: 6) {
-                StatusDot(color(status))
-                Text(label(status)).font(.geist(12)).foregroundStyle(Color.textMuted)
+                StatusDot(status.color)
+                Text(status.label).font(.geist(12)).foregroundStyle(Color.textMuted)
             }
         }
     }
 
-    private func label(_ status: DeliveryStatus) -> String {
-        switch status {
-        case .sending: "Sending"
-        case .sent: "Sent"
-        case .delivered: "Delivered"
-        case .delayed: "Delayed"
-        case .bounced: "Bounced"
-        case .complained: "Marked as spam"
-        case .failed: "Failed"
-        }
-    }
-
-    private func color(_ status: DeliveryStatus) -> Color {
-        if status.isFailure { return .danger }
-        return switch status {
-        case .delivered: .success
-        case .delayed: .warning
-        default: .textMuted
-        }
-    }
 }
 
 private struct AttachmentList: View {

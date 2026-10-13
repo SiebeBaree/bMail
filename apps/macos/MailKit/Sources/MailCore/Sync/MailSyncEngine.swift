@@ -21,6 +21,8 @@ public actor MailSyncEngine {
     private var outboxTimer: Task<Void, Never>?
     private var wakeUp: AsyncStream<Void>.Continuation?
     private var isVisible = true
+    /// Callers of `refresh`, resumed when the next pass to start has finished.
+    private var waiters: [CheckedContinuation<Void, Never>] = []
 
     public init(store: MailStore, status: SyncStatus) {
         self.store = store
@@ -53,6 +55,8 @@ public actor MailSyncEngine {
         ticker = nil
         wakeUp?.finish()
         wakeUp = nil
+        for waiter in waiters { waiter.resume() }
+        waiters = []
     }
 
     /// Polls slowly while no window is on screen, and pulls as soon as one is again.
@@ -83,13 +87,26 @@ public actor MailSyncEngine {
         wakeUp?.yield()
     }
 
+    /// Runs a pass and returns once it's done, for pull to refresh. Passes never overlap: during one, this waits for
+    /// the next.
+    public func refresh() async {
+        guard loop != nil else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+            signal()
+        }
+    }
+
     // MARK: - One pass
 
     private func pass() async {
+        let finished = waiters
+        waiters = []
         await pushMutations()
         await sendDueMessages()
         await pull()
         scheduleOutboxTimer()
+        for waiter in finished { waiter.resume() }
     }
 
     private func pull() async {

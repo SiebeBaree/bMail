@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 
 struct ComposerView: View {
@@ -190,7 +191,7 @@ struct ComposerView: View {
 }
 
 private struct QuoteToggle: View {
-    let quote: ComposerModel.Quote
+    let quote: Quote
     @Binding var isShown: Bool
 
     var body: some View {

@@ -1,6 +1,7 @@
 import AuthenticationServices
 import DesignSystem
 import MailCore
+import MailUI
 import Providers
 import SQLiteData
 import SwiftUI
@@ -165,9 +166,9 @@ private struct AccountsSection: View {
     private func createAddress(_ localPart: String, on domain: Domain) {
         Task {
             do {
-                let changes = try await model.admin
+                let changes = try await model.session.admin
                     .addMailbox(localPart: localPart, displayName: localPart.capitalized, on: domain.id)
-                try model.store.merge(changes, source: "settings")
+                try model.session.store.merge(changes, source: "settings")
                 newAddressDomain = nil
                 error = nil
             } catch {
@@ -180,9 +181,9 @@ private struct AccountsSection: View {
         Task {
             do {
                 if account.kind == .domain {
-                    try model.store.merge(try await model.admin.removeMailbox(account.id), source: "settings")
+                    try model.session.store.merge(try await model.session.admin.removeMailbox(account.id), source: "settings")
                 } else {
-                    try model.disconnect(account)
+                    try model.session.disconnect(account)
                 }
                 error = nil
             } catch {
@@ -205,7 +206,7 @@ private struct AccountsSection: View {
                     preferredBrowserSession: .ephemeral,
                     additionalHeaderFields: [:]
                 )
-                try model.connectGmail(tokens: try await client.finish(attempt, callback: callback))
+                try model.session.connectGmail(tokens: try await client.finish(attempt, callback: callback))
             } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
                 return
             } catch {
@@ -343,17 +344,17 @@ private struct LabelsSection: View {
     private func rename(_ label: MailLabel, to name: String) {
         let name = name.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty, name != label.name else { return }
-        run { try await model.admin.renameLabel(label.id, to: name) }
+        run { try await model.session.admin.renameLabel(label.id, to: name) }
     }
 
     private func delete(_ label: MailLabel) {
-        run { try await model.admin.deleteLabel(label.id) }
+        run { try await model.session.admin.deleteLabel(label.id) }
     }
 
     private func run(_ operation: @escaping () async throws -> ChangeSet) {
         Task {
             do {
-                try model.store.merge(try await operation(), source: "labels")
+                try model.session.store.merge(try await operation(), source: "labels")
                 error = nil
             } catch {
                 self.error = error.localizedDescription
@@ -386,14 +387,5 @@ private struct LabelRow: View {
         .onHover { isHovered = $0 }
         .onAppear { name = label.name }
         .onChange(of: label.name) { _, new in name = new }
-    }
-}
-
-extension Account.Kind {
-    var label: String {
-        switch self {
-        case .domain: "Your domain"
-        case .gmail: "Gmail"
-        }
     }
 }

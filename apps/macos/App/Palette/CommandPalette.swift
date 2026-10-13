@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SQLiteData
 import SwiftUI
 
@@ -75,8 +76,8 @@ struct CommandPalette: View {
             .filter(\.isInPalette)
             .filter { !$0.needsConversation || model.selection != nil }
             .map(PaletteItem.command)
-        let accounts = model.accounts.map(PaletteItem.account)
-        let labels = ((try? model.store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }) ?? []).map(PaletteItem.label)
+        let accounts = model.session.accounts.map(PaletteItem.account)
+        let labels = ((try? model.session.store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }) ?? []).map(PaletteItem.label)
         let conversations: [PaletteItem] = query.count < 2 ? [] : conversationMatches.map(PaletteItem.conversation)
 
         let scored = (commands + accounts + labels).compactMap { item -> (PaletteItem, Double)? in
@@ -88,8 +89,8 @@ struct CommandPalette: View {
     }
 
     private var conversationMatches: [Conversation] {
-        guard let ids = try? model.store.search(query, limit: 6), !ids.isEmpty else { return [] }
-        let found = (try? model.store.database.read { db in try Conversation.where { $0.id.in(ids) }.fetchAll(db) }) ?? []
+        guard let ids = try? model.session.store.search(query, limit: 6), !ids.isEmpty else { return [] }
+        let found = (try? model.session.store.database.read { db in try Conversation.where { $0.id.in(ids) }.fetchAll(db) }) ?? []
         return ids.compactMap { id in found.first { $0.id == id } }
     }
 

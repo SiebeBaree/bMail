@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SQLiteData
 import SwiftUI
 
@@ -69,7 +70,7 @@ struct ConversationView: View {
             }
             Spacer()
             if let conversation = thread.conversation, thread.messages.contains(where: { $0.direction == .inbound && $0.unsubscribe != nil }) {
-                if model.unsubscribed.contains(conversation.id) {
+                if model.session.unsubscribed.contains(conversation.id) {
                     Text("Unsubscribed").font(.geist(12)).foregroundStyle(Color.textMuted).padding(.trailing, 8)
                 } else {
                     Button("Unsubscribe") { model.perform(.unsubscribe) }

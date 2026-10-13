@@ -35,6 +35,8 @@ targets:
         product: MailCore
       - package: MailKit
         product: Providers
+      - package: MailKit
+        product: MailUI
     settings:
       base:
         PRODUCT_NAME: bMail

@@ -1,4 +1,5 @@
 import DesignSystem
+import MailUI
 import SwiftUI
 
 /// `?`. Every shortcut, grouped, read from the same keymap the keys use.
@@ -45,7 +46,7 @@ struct ShortcutSheet: View {
         Command.allCases.filter { command in
             guard command.group == group else { return false }
             if case let .account(number) = command { return number == 1 }
-            if case let .go(tab) = command { return Tab.visible.contains(tab) }
+            if case let .go(tab) = command { return MailTab.visible.contains(tab) }
             return true
         }
     }

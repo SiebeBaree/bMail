@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SwiftUI
 
 struct ConversationRow: View {
@@ -76,22 +77,5 @@ struct ConversationRow: View {
         .onHover { isHovered = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected || isChecked ? .isSelected : [])
-    }
-}
-
-/// Dates the way a mail list wants them: the time today, the weekday this week, the date before that.
-enum MailDate {
-    static func short(_ date: Date, now: Date = .now) -> String {
-        let calendar = Calendar.current
-        if calendar.isDate(date, inSameDayAs: now) { return date.formatted(date: .omitted, time: .shortened) }
-        if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 6 {
-            return date.formatted(.dateTime.weekday(.abbreviated))
-        }
-        if calendar.isDate(date, equalTo: now, toGranularity: .year) { return date.formatted(.dateTime.month(.abbreviated).day()) }
-        return date.formatted(.dateTime.month(.abbreviated).day().year())
-    }
-
-    static func long(_ date: Date) -> String {
-        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
     }
 }

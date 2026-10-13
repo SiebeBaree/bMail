@@ -2,34 +2,22 @@ import AppKit
 import DesignSystem
 import Foundation
 import MailCore
+import MailUI
 import Observation
 import OSLog
-import Providers
-import SQLiteData
 
 private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands")
 
 /// The app's state and the one place commands are carried out, whether they come from a key, the palette or the menu.
+/// What changes mail lives in the session, which the iPhone app shares; this adds the Mac's selection and keys.
 @MainActor
 @Observable
 final class AppModel {
-    enum Phase { case signedOut, ready }
-
-    let store: MailStore
-    let syncStatus = SyncStatus()
-    let toasts = ToastCenter()
-    /// The api for your domains. Nil until you first sign in, which is where you say which server is yours.
-    private(set) var server: ServerConnection?
-    @ObservationIgnored private let engine: MailSyncEngine
+    let session = MailSession(google: BuildSettings.google)
     @ObservationIgnored private var keyboard: KeyboardRouter?
-    /// Each entry is one action, which can have changed many conversations at once.
-    @ObservationIgnored private var undoStack: [[Mutation]] = []
     @ObservationIgnored private var markReadTask: Task<Void, Never>?
-    /// Set at the end of init: it needs the model itself, for links clicked inside a message.
-    @ObservationIgnored private(set) var pages: MailPages!
 
-    var phase: Phase = .signedOut
-    var tab: Tab = .inbox {
+    var tab: MailTab = .inbox {
         didSet {
             labelFilter = nil
             if tab != oldValue { selection = nil; checked = [] }
@@ -62,7 +50,7 @@ final class AppModel {
     var isLabelPickerOpen = false
     var isSearchFocused = false
     var searchText = "" {
-        didSet { runSearch() }
+        didSet { searchResults = session.search(searchText) }
     }
     /// Conversation ids matching `searchText`, best first. Nil when not searching.
     var searchResults: [Conversation.ID]?
@@ -70,135 +58,28 @@ final class AppModel {
 
     init() {
         Typography.register()
-        // The cache only holds what can be synced again, so one that won't open is deleted and rebuilt.
-        let database: any DatabaseWriter
-        // The cache and the session belong to one server, so pointing the app at another starts signed out with an
-        // empty cache. `--args -resetCache YES` empties it on purpose.
-        let defaults = UserDefaults.standard
-        // Builds from before the server step only recorded the server as the cache's, so that one carries over.
-        let serverURL = (defaults.string(forKey: "serverURL") ?? defaults.string(forKey: "cacheServerURL")).flatMap(URL.init(string:))
-        let serverChanged = defaults.string(forKey: "cacheServerURL") != serverURL?.absoluteString
-        if serverChanged { Keychain.delete(ServerConnection.sessionKey) }
-        defaults.set(serverURL?.absoluteString, forKey: "cacheServerURL")
-        let reset = serverChanged || defaults.bool(forKey: "resetCache")
-        do {
-            database = try appDatabase(reset: reset)
-        } catch {
-            do {
-                database = try appDatabase(reset: true)
-            } catch {
-                fatalError("The local mail cache couldn't be created: \(error)")
-            }
-        }
-        prepareDependencies { $0.defaultDatabase = database }
-        store = MailStore(database: database)
-        server = serverURL.map(ServerConnection.init(baseURL:))
-        engine = MailSyncEngine(store: store, status: syncStatus)
         keyboard = KeyboardRouter { [weak self] command in self?.perform(command) ?? false }
         keyboard?.start()
-        pages = MailPages(model: self)
-        #if DEBUG
-            // Scripted runs against a local api: `open … --args -sessionToken <token>` signs in without typing.
-            if let token = UserDefaults.standard.string(forKey: "sessionToken") {
-                Keychain.write(token, for: ServerConnection.sessionKey)
-            }
-        #endif
-        if server?.isSignedIn == true { start() }
-    }
-
-    /// Points the app at the server typed on the sign-in screen and remembers it. The cache and the session belong to one
-    /// server, so another one starts both over. Development can skip the typing: `open … --args -serverURL <url>`.
-    @discardableResult
-    func connect(to url: URL) throws -> ServerConnection {
-        if let server, server.baseURL == url { return server }
-        try store.eraseAll()
-        Keychain.delete(ServerConnection.sessionKey)
-        UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
-        UserDefaults.standard.set(url.absoluteString, forKey: "cacheServerURL")
-        let server = ServerConnection(baseURL: url)
-        self.server = server
-        return server
-    }
-
-    /// Domain, mailbox and label changes, which go straight to your server.
-    var admin: ServerAdmin {
-        get throws {
-            guard let server else { throw ProviderError(.rejected, "Sign in to your server first.") }
-            return ServerAdmin(connection: server)
+        session.openLink = { [weak self] url in self?.open(url) }
+        // Undoing a move out of this tab shows the conversation again.
+        session.didUndo = { [weak self] mutations in
+            guard let self, case let .move(id, from, _) = mutations.first, from == self.tab.folder else { return }
+            self.selection = id
         }
     }
 
-    func start() {
-        phase = .ready
-        pages.warmUp()
-        configureProviders()
-        Task { await engine.start() }
-    }
-
-    /// One provider for your domains plus one per Gmail account. Called again whenever accounts change.
-    func configureProviders() {
-        guard let server else { return }
-        var providers: [any MailProvider] = [ServerProvider(connection: server, store: store)]
-        for account in accounts {
-            switch account.kind {
-            case .domain: continue
-            case .gmail:
-                if let client = BuildSettings.google {
-                    providers.append(GmailProvider(account: account, client: client, store: store, tracking: ServerTracking(connection: server)))
-                }
-            }
+    /// A link from a message: mail opens the composer, the web opens in the browser.
+    private func open(_ url: URL) {
+        switch url.scheme {
+        case "mailto": composer = ComposerModel.new(app: self, mailto: url)
+        case "http", "https": NSWorkspace.shared.open(url)
+        default: break
         }
-        Task { [engine] in await engine.setProviders(providers) }
     }
 
-    /// Adds a Gmail account after its OAuth sign-in. The id follows from the address, so connecting the same
-    /// account again replaces it instead of adding a second one.
-    func connectGmail(tokens: OAuthTokens) throws {
-        guard let address = tokens.email?.lowercased() else {
-            throw ProviderError(.rejected, "The sign-in didn't say which account it was for. Try again.")
-        }
-        let account = Account(
-            id: UUID(stableFrom: "gmail:\(address)"), kind: .gmail, address: address,
-            displayName: address, domainID: nil, position: 1_000 + accounts.count
-        )
-        try TokenStore.save(tokens, for: account.id)
-        var changes = ChangeSet()
-        changes.accounts = [account]
-        try store.merge(changes, source: "settings")
-        configureProviders()
-        toasts.show(Toast("Connected \(address)", detail: "Your mail is syncing.", symbol: "checkmark", tone: .success))
-    }
-
-    func disconnect(_ account: Account) throws {
-        Keychain.delete("oauth.\(account.id.uuidString)")
-        var changes = ChangeSet()
-        changes.removedAccountIDs = [account.id]
-        try store.merge(changes, source: "settings")
-        try? store.database.write { db in try SyncCursor.find("\(account.kind.rawValue):\(account.id)").delete().execute(db) }
-        configureProviders()
-    }
-
-    /// Signing out makes this Mac forget the account: the cache and every Gmail token goes with it, so the next
-    /// person to sign in starts clean.
     func signOut() async {
-        await engine.stop()
-        await server?.signOut()
-        for account in accounts where account.kind != .domain {
-            Keychain.delete("oauth.\(account.id.uuidString)")
-        }
-        try? store.eraseAll()
+        await session.signOut()
         selection = nil
-        phase = .signedOut
-    }
-
-    /// Pulls right away, e.g. when the window comes to the front.
-    func syncNow() {
-        engine.wake()
-    }
-
-    /// Whether any window is on screen. Hidden, the app polls every few minutes instead of every few seconds.
-    func setVisible(_ visible: Bool) {
-        Task { [engine] in await engine.setVisible(visible) }
     }
 
     // MARK: - Commands
@@ -207,7 +88,7 @@ final class AppModel {
     @discardableResult
     func perform(_ command: Command) -> Bool {
         commandLog.debug("perform \(command.title, privacy: .public)")
-        guard phase == .ready else { return false }
+        guard session.phase == .ready else { return false }
         if command.needsConversation, selection == nil, checked.isEmpty { return false }
 
         switch command {
@@ -217,18 +98,14 @@ final class AppModel {
         case .markDone: move(to: tab == .done ? .inbox : .done)
         case .trash: move(to: .trash)
         case .spam: move(to: .spam)
-        case .toggleStar:
-            let targets = targets
-            // Mixed picks all get the star; only when every one has it does S take it away.
-            let star = targets.contains { !$0.isStarred }
-            apply(targets.map { .setStarred($0.id, star) }, toast: star ? "Starred" : "Unstarred")
+        case .toggleStar: session.toggleStar(targets)
         case .toggleRead:
-            let targets = targets
-            let read = targets.contains { !$0.isRead }
             markReadTask?.cancel()
-            apply(targets.map { .setRead($0.id, read) }, toast: read ? "Marked as read" : "Marked as unread")
+            session.toggleRead(targets)
         case .label: isLabelPickerOpen = true
-        case .unsubscribe: return unsubscribe()
+        case .unsubscribe:
+            guard let id = selection else { return false }
+            session.unsubscribe(from: id)
         case .toggleCheck:
             guard let id = selection else { return false }
             toggleCheck(id)
@@ -240,7 +117,7 @@ final class AppModel {
             guard !listOrder.isEmpty else { return false }
             checked = checked.count == listOrder.count ? [] : Set(listOrder)
         // Z answers the newest toast first (Undo send, Undo archive), then walks back through earlier changes.
-        case .undo: return toasts.performLatestAction(key: "Z") || undo()
+        case .undo: return session.toasts.performLatestAction(key: "Z") || session.undo()
         case .compose: composer = ComposerModel.new(app: self)
         case .reply, .replyAll, .forward:
             guard let id = selection else { return false }
@@ -252,7 +129,7 @@ final class AppModel {
         case let .go(destination): tab = destination
         case .allAccounts: accountFilter = nil
         case let .account(number):
-            guard let account = accounts[safe: number - 1] else { return false }
+            guard let account = session.accounts[safe: number - 1] else { return false }
             accountFilter = account.id
         }
         return true
@@ -282,13 +159,10 @@ final class AppModel {
     /// Moves the picked conversations, or the open one, and opens the next one left, so triage is one key per
     /// conversation.
     private func move(to folder: Folder) {
-        let moving = targets.filter { $0.folder != folder }
-        guard !moving.isEmpty else { return }
-        let ids = Set(moving.map(\.id))
+        let ids = Set(session.move(targets, to: folder).map(\.id))
+        guard !ids.isEmpty else { return }
         let start = selection.flatMap(listOrder.firstIndex(of:)) ?? 0
         let next = (listOrder[start...].dropFirst() + listOrder[..<start].reversed()).first { !ids.contains($0) }
-        let toast = moving.count == 1 ? folder.doneMessage : "\(moving.count) conversations: \(folder.doneMessage.lowercased())"
-        apply(moving.map { .move($0.id, from: $0.folder, to: folder) }, toast: toast)
         checked = []
         if let selection, ids.contains(selection) { self.selection = next }
     }
@@ -303,31 +177,7 @@ final class AppModel {
     }
 
     private var targets: [Conversation] {
-        let ids = targetIDs
-        return (try? store.database.read { db in try Conversation.where { $0.id.in(ids) }.fetchAll(db) }) ?? []
-    }
-
-    func apply(_ mutations: [Mutation], toast: String?) {
-        guard !mutations.isEmpty else { return }
-        do {
-            try store.perform(mutations)
-            undoStack.append(mutations)
-            engine.wake()
-            if let toast {
-                toasts.show(Toast(toast, action: .init("Undo", key: "Z") { [weak self] in _ = self?.undo() }))
-            }
-        } catch {
-            toasts.show(Toast("Couldn't save that change.", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
-        }
-    }
-
-    private func undo() -> Bool {
-        guard let mutations = undoStack.popLast() else { return false }
-        try? store.perform(mutations.reversed().map(\.inverse))
-        engine.wake()
-        if case let .move(id, from, _) = mutations.first, from == tabFolder { selection = id }
-        toasts.show(Toast("Undone", symbol: "arrow.uturn.backward"))
-        return true
+        session.conversations(targetIDs)
     }
 
     /// Marks a conversation read once it has been on screen for a moment, so skimming with J doesn't mark everything.
@@ -336,187 +186,49 @@ final class AppModel {
         guard let id = selection else { return }
         markReadTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled, let self, self.selection == id, let conversation = self.selectedConversation,
-                !conversation.isRead
-            else { return }
-            try? self.store.perform([.setRead(id, true)])
-            self.engine.wake()
+            guard !Task.isCancelled, let self, self.selection == id else { return }
+            self.session.markRead(id)
         }
     }
 
     // MARK: - Labels
 
-    /// Puts the label on every target, or takes it off when they all have it already.
     func toggleLabel(_ labelID: MailLabel.ID) {
-        let ids = targetIDs
-        guard !ids.isEmpty, let label = try? store.database.read({ db in try MailLabel.find(labelID).fetchOne(db) }) else { return }
-        let labeled = Set((try? store.database.read { db in
-            try ConversationLabel.where { $0.labelID.eq(labelID) && $0.conversationID.in(ids) }.select(\.conversationID).fetchAll(db)
-        }) ?? [])
-        let isOn = labeled.count < ids.count
-        apply(ids.filter { labeled.contains($0) != isOn }.map { .label($0, labelID, isOn) }, toast: isOn ? "Labeled \(label.name)" : "Removed \(label.name)")
+        session.toggleLabel(labelID, on: targetIDs)
     }
 
-    /// Creates a label on the api and puts it on the targets.
     func createLabel(named name: String) {
-        let label = MailLabel(id: UUID(), name: name.trimmingCharacters(in: .whitespaces))
-        guard !label.name.isEmpty else { return }
-        Task {
-            do {
-                try store.merge(try await admin.createLabel(label), source: "labels")
-                toggleLabel(label.id)
-            } catch {
-                toasts.show(Toast("Couldn't create \(label.name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
-            }
-        }
-    }
-
-    // MARK: - Unsubscribe
-
-    /// Conversations unsubscribed from since launch, so the button can say it worked.
-    var unsubscribed: Set<Conversation.ID> = []
-
-    /// Leaves the mailing list behind the open conversation: one-click where the sender supports it, otherwise a
-    /// message to its unsubscribe address, otherwise its page in the browser.
-    private func unsubscribe() -> Bool {
-        guard let id = selection else { return false }
-        let message = try? store.database.read { db in
-            try Message.where { $0.conversationID.eq(id) && $0.direction.eq(Direction.inbound) && $0.unsubscribe.isNot(nil) }
-                .order { $0.sentAt.desc() }
-                .fetchOne(db)
-        }
-        guard let message, let target = message.unsubscribe else {
-            toasts.show(Toast("\(selectedConversation?.participants ?? "This sender") doesn't offer a way to unsubscribe.", symbol: "bell.slash"))
-            return true
-        }
-        let sender = message.from.displayName
-        Task {
-            if target.isOneClick, let url = target.url, await postOneClick(url) {
-                unsubscribed.insert(id)
-                toasts.show(Toast("Unsubscribed from \(sender)", symbol: "bell.slash", tone: .success))
-            } else if let mailto = target.mailto, let account = accounts.first(where: { $0.id == message.accountID }),
-                let request = OutgoingMessage(unsubscribing: mailto, from: account) {
-                try? store.enqueue(request, sendAt: .now)
-                engine.wake()
-                unsubscribed.insert(id)
-                toasts.show(Toast("Unsubscribed from \(sender)", detail: "Sent the request to \(request.to.first?.email ?? "them").", symbol: "bell.slash", tone: .success))
-            } else if let url = target.url {
-                NSWorkspace.shared.open(url)
-                toasts.show(Toast("Finish unsubscribing from \(sender) in your browser.", symbol: "bell.slash"))
-            }
-        }
-        return true
-    }
-
-    /// RFC 8058: a POST with exactly this body, no cookies and no redirects to follow by hand.
-    private func postOneClick(_ url: URL) async -> Bool {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "content-type")
-        request.httpBody = Data("List-Unsubscribe=One-Click".utf8)
-        guard let (_, response) = try? await URLSession.shared.data(for: request) else { return false }
-        return (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+        session.createLabel(named: name, on: targetIDs)
     }
 
     // MARK: - Sending
 
-    /// Holds the message for the undo window, then the sync engine sends it.
-    func send(_ message: OutgoingMessage) {
-        let undoWindow: TimeInterval = 10
-        do {
-            try store.enqueue(message, sendAt: Date().addingTimeInterval(undoWindow))
-            engine.wake()
-            let toast = Toast(
-                "Sending in \(Int(undoWindow))s",
-                symbol: "paperplane",
-                action: .init("Undo", key: "Z") { [weak self] in self?.cancelSend(message.id) },
-                duration: .seconds(undoWindow)
-            )
-            toasts.show(toast)
-            Task { [toasts] in
-                for remaining in stride(from: Int(undoWindow) - 1, through: 1, by: -1) {
-                    try? await Task.sleep(for: .seconds(1))
-                    toasts.update(toast.id, title: "Sending in \(remaining)s")
-                }
-            }
-        } catch {
-            toasts.show(Toast("Couldn't queue the message.", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
-        }
-    }
-
-    private func cancelSend(_ id: Message.ID) {
-        guard let message = try? store.cancelSend(id) else {
-            toasts.show(Toast("Too late, it's already on its way.", symbol: "paperplane"))
-            return
-        }
-        composer = ComposerModel.reopen(message, app: self)
+    /// Undo brings back the composer the message came from, exactly as it was.
+    func send(_ message: OutgoingMessage, from composer: ComposerModel) {
+        session.send(message) { [weak self] in self?.composer = composer }
     }
 
     // MARK: - Attachments
 
-    /// Downloads an attachment into Downloads and opens it. Links and Gmail's ids expire, so each open fetches fresh.
+    /// Downloads an attachment into Downloads and opens it.
     func open(_ attachment: Attachment, of message: Message) {
-        guard let server, let account = accounts.first(where: { $0.id == message.accountID }) else { return }
-        toasts.show(Toast("Downloading \(attachment.filename)", symbol: "arrow.down.circle", duration: .seconds(3)))
+        session.toasts.show(Toast("Downloading \(attachment.filename)", symbol: "arrow.down.circle", duration: .seconds(3)))
         Task {
             do {
-                let destination = URL.downloadsDirectory.appending(path: attachment.filename)
-                let data: Data
-                switch account.kind {
-                case .domain:
-                    let url = try await ServerProvider(connection: server, store: store).downloadURL(for: attachment.id)
-                    data = try await URLSession.shared.data(from: url).0
-                case .gmail:
-                    guard let client = BuildSettings.google else { return }
-                    data = try await GmailProvider(account: account, client: client, store: store, tracking: ServerTracking(connection: server))
-                        .download(attachment)
-                }
-                try data.write(to: destination, options: .atomic)
+                let destination = URL.downloadsDirectory.appending(path: attachment.savedName, directoryHint: .notDirectory)
+                try await session.download(attachment, of: message).write(to: destination, options: .atomic)
                 NSWorkspace.shared.open(destination)
             } catch {
-                toasts.show(Toast("Couldn't open \(attachment.filename).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
+                session.toasts.show(Toast("Couldn't open \(attachment.filename).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
             }
         }
     }
 
-    // MARK: - Search
-
-    private func runSearch() {
-        let query = searchText.trimmingCharacters(in: .whitespaces)
-        searchResults = query.isEmpty ? nil : (try? store.search(query)) ?? []
-    }
-
     // MARK: - Reading
-
-    var accounts: [Account] {
-        (try? store.database.read { db in try Account.order(by: \.position).fetchAll(db) }) ?? []
-    }
 
     var selectedConversation: Conversation? {
         guard let selection else { return nil }
-        return try? store.database.read { db in try Conversation.find(selection).fetchOne(db) }
-    }
-
-    /// The folder the current tab shows, when it is one.
-    private var tabFolder: Folder? {
-        switch tab {
-        case .inbox: .inbox
-        case .done: .done
-        case .spam: .spam
-        case .trash: .trash
-        default: nil
-        }
-    }
-}
-
-extension Folder {
-    var doneMessage: String {
-        switch self {
-        case .inbox: "Moved to inbox"
-        case .done: "Marked as done"
-        case .spam: "Reported as spam"
-        case .trash: "Moved to trash"
-        }
+        return session.conversations([selection]).first
     }
 }
 

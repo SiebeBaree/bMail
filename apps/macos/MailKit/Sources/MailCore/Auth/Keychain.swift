@@ -2,7 +2,8 @@ import Foundation
 import Security
 
 /// Secrets the app keeps: the api session and each mail account's OAuth tokens. Stored as generic passwords, readable
-/// only by this app and only while the Mac is unlocked.
+/// only by this app on this device. On iPhone they stay readable while it's locked after the first unlock, so a message
+/// sent just before locking still goes out. The Mac's file keychain ignores that setting.
 public enum Keychain {
     private static let service = "be.baree.mail"
 
@@ -26,7 +27,7 @@ public enum Keychain {
         ]
         let attributes: [CFString: Any] = [
             kSecValueData: Data(value.utf8),
-            kSecAttrAccessible: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
         ]
         if SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecItemNotFound {
             SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
