@@ -23,6 +23,18 @@ import Testing
         let engine = MailSyncEngine(store: MailStore(database: try inMemoryDatabase()), status: await SyncStatus())
         await engine.refresh()
     }
+
+    @MainActor @Test func onlyAPassOnAStaleListCountsAsCatchingUp() {
+        let status = SyncStatus()
+        status.passStarted()
+        #expect(status.isCatchingUp)
+        status.succeeded("test")
+        status.passFinished()
+        #expect(!status.isCatchingUp)
+
+        status.passStarted()
+        #expect(!status.isCatchingUp)
+    }
 }
 
 private actor CountingProvider: MailProvider {

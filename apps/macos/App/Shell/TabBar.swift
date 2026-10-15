@@ -72,34 +72,26 @@ private struct TabButton: View {
     }
 }
 
-/// "Synced 4s ago", or what's wrong. Updates every few seconds, never animates.
+/// "Checking for mail" while a stale list catches up, "Updated just now" after, or what's wrong. Updates every few
+/// seconds, never animates.
 private struct SyncLabel: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        let sync = model.session.syncStatus
         TimelineView(.periodic(from: .now, by: 5)) { context in
-            Group {
-                if !model.session.syncStatus.failing.isEmpty {
-                    HStack(spacing: 6) {
-                        StatusDot(.warning)
-                        Text(model.session.syncStatus.isOffline ? "Offline" : "Sync failed")
-                    }
-                    .help(model.session.syncStatus.failing.values.map(\.message).sorted().joined(separator: "\n"))
-                } else if let date = model.session.syncStatus.lastSyncedAt {
-                    Text("Synced \(relative(date, now: context.date))")
-                } else {
-                    Text("Syncing")
-                }
+            HStack(spacing: 6) {
+                if !sync.failing.isEmpty { StatusDot(.warning) }
+                Text(sync.line(at: context.date))
             }
             .font(.meta)
-            .foregroundStyle(Color.textMuted)
+            .foregroundStyle(sync.isCatchingUp ? Color.textSecondary : Color.textMuted)
+            .help(help(sync))
         }
     }
 
-    private func relative(_ date: Date, now: Date) -> String {
-        let seconds = max(0, Int(now.timeIntervalSince(date)))
-        if seconds < 5 { return "just now" }
-        if seconds < 60 { return "\(seconds)s ago" }
-        return "\(seconds / 60)m ago"
+    private func help(_ sync: SyncStatus) -> String {
+        if !sync.failing.isEmpty { return sync.failing.values.map(\.message).sorted().joined(separator: "\n") }
+        return sync.lastSyncedAt.map { "Last synced \(MailDate.long($0))" } ?? ""
     }
 }

@@ -43,14 +43,17 @@ private struct ConversationList: View {
         // Selection only while selecting: with it bound, a tap on a row picks it instead of opening it.
         List(selection: editMode.isEditing ? $picked : nil) {
             // The large title, as the list's first row: iOS's own large title can't hold a menu you can tap.
-            TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: true, isEnabled: !editMode.isEditing)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 16)
-                .padding(.bottom, 6)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.canvas)
-                .selectionDisabled()
+            VStack(alignment: .leading, spacing: 2) {
+                TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: true, isEnabled: !editMode.isEditing)
+                SyncLine(isLarge: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 16)
+            .padding(.bottom, 6)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.canvas)
+            .selectionDisabled()
             ForEach(query.conversations) { conversation in
                 NavigationLink(value: conversation.id) {
                     ConversationRow(
@@ -85,7 +88,6 @@ private struct ConversationList: View {
         }
         .navigationTitle(editMode.isEditing ? pickedTitle : model.title)
         .navigationBarTitleDisplayMode(.inline)
-        .navigationSubtitle(status)
         .toolbar { toolbar }
         .searchable(text: $model.searchText, prompt: "Search mail")
         .task(id: request) { await query.load(request) }
@@ -120,13 +122,6 @@ private struct ConversationList: View {
 
     private var pickedTitle: String {
         picked.isEmpty ? "Select" : "\(picked.count) Selected"
-    }
-
-    /// Only said when something's wrong. A healthy sync needs no words.
-    private var status: String {
-        let sync = model.session.syncStatus
-        guard !sync.failing.isEmpty else { return "" }
-        return sync.isOffline ? "Offline" : "Sync failed"
     }
 
     private var emptyMessage: String {
@@ -201,10 +196,13 @@ private struct ConversationList: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         // Shown once the header row has scrolled away, so the title is never on screen twice.
         ToolbarItem(placement: .title) {
-            TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: false, isEnabled: !editMode.isEditing)
-                .opacity(isTitleCollapsed ? 1 : 0)
-                .allowsHitTesting(isTitleCollapsed)
-                .accessibilityHidden(!isTitleCollapsed)
+            VStack(spacing: 0) {
+                TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: false, isEnabled: !editMode.isEditing)
+                SyncLine(isLarge: false)
+            }
+            .opacity(isTitleCollapsed ? 1 : 0)
+            .allowsHitTesting(isTitleCollapsed)
+            .accessibilityHidden(!isTitleCollapsed)
         }
         if editMode.isEditing {
             ToolbarItem(placement: .topBarLeading) {
@@ -347,6 +345,22 @@ private struct TitleMenu: View {
             .foregroundStyle(Color.textPrimary)
             .lineLimit(1)
             .contentTransition(.opacity)
+    }
+}
+
+/// Under the title: "Checking for mail" while a stale list catches up, then how fresh it is, or what's wrong.
+private struct SyncLine: View {
+    let isLarge: Bool
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let sync = model.session.syncStatus
+        TimelineView(.periodic(from: .now, by: 15)) { context in
+            Text(sync.line(at: context.date))
+                .font(.phone(isLarge ? 14 : 11, relativeTo: isLarge ? .subheadline : .caption2))
+                .foregroundStyle(sync.isCatchingUp ? Color.textSecondary : Color.textMuted)
+                .lineLimit(1)
+        }
     }
 }
 

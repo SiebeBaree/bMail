@@ -389,7 +389,7 @@ function TabBar({ state, dispatch }: { state: State; dispatch: Dispatch<Action> 
                 />
             ))}
             <span className="flex-1" />
-            <span className="pb-3 font-mono text-[12px] text-muted">Synced just now</span>
+            <span className="pb-3 font-mono text-[12px] text-muted">Updated just now</span>
         </div>
     );
 }

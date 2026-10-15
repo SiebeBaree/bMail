@@ -102,10 +102,12 @@ public actor MailSyncEngine {
     private func pass() async {
         let finished = waiters
         waiters = []
+        await status.passStarted()
         await pushMutations()
         await sendDueMessages()
         await pull()
         scheduleOutboxTimer()
+        await status.passFinished()
         for waiter in finished { waiter.resume() }
     }
 

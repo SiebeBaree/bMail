@@ -150,6 +150,18 @@ extension Attachment {
     }
 }
 
+extension SyncStatus {
+    /// The status line under the list's title: trouble first, then a pass the list is waiting on, then how fresh it is.
+    public func line(at now: Date) -> String {
+        if !failing.isEmpty { return isOffline ? "Offline" : "Sync failed" }
+        guard let lastSyncedAt, !isCatchingUp else { return "Checking for mail" }
+        let minutes = Int(now.timeIntervalSince(lastSyncedAt) / 60)
+        if minutes < 1 { return "Updated just now" }
+        if minutes < 60 { return "Updated \(minutes)m ago" }
+        return "Updated at \(lastSyncedAt.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
 extension Toast {
     /// What the sync engine reports, as the toast you see.
     public init(_ notice: SyncStatus.Notice) {

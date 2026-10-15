@@ -13,6 +13,9 @@ public final class SyncStatus {
     }
 
     public private(set) var lastSyncedAt: Date?
+    /// A pass is running on a list that may be missing mail: the last good sync was a while ago, or there never was
+    /// one. The routine pass every few seconds doesn't count, so the status line doesn't flicker.
+    public private(set) var isCatchingUp = false
     /// Sources whose last pass failed, mapped to why.
     public private(set) var failing: [String: Failure] = [:]
     /// The latest notice, consumed by the toast layer.
@@ -27,6 +30,14 @@ public final class SyncStatus {
     }
 
     public var isOffline: Bool { failing.values.contains(where: \.isOffline) }
+
+    func passStarted() {
+        isCatchingUp = lastSyncedAt.map { $0.timeIntervalSinceNow < -30 } ?? true
+    }
+
+    func passFinished() {
+        isCatchingUp = false
+    }
 
     func succeeded(_ source: String) {
         lastSyncedAt = Date()
