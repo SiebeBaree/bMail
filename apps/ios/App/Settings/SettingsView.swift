@@ -27,71 +27,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Accounts") {
-                    ForEach(accounts) { account in
-                        NavigationLink {
-                            AccountSettings(account: account, isCatchAll: domains.contains { $0.catchAllMailboxID == account.id })
-                        } label: {
-                            AccountRow(account: account)
-                        }
-                    }
-                    addAccount
-                }
-                .listRowBackground(Color.raised)
-
-                Section {
-                    ForEach(labels) { label in
-                        Button {
-                            newLabelName = label.name
-                            renaming = label
-                        } label: {
-                            Label(label.name, systemImage: "tag").foregroundStyle(Color.textPrimary)
-                        }
-                        .swipeActions {
-                            Button("Delete", systemImage: "trash", role: .destructive) { deleting = label }
-                        }
-                    }
-                } header: {
-                    Text("Labels")
-                } footer: {
-                    if labels.isEmpty { Text("Label a conversation to create your first one.") }
-                }
-                .listRowBackground(Color.raised)
-
-                Section {
-                    ForEach(domains) { domain in
-                        NavigationLink {
-                            DomainSettings(domainID: domain.id)
-                        } label: {
-                            HStack {
-                                Text(domain.name).font(.phone(16, .medium))
-                                Spacer()
-                                StatusDot(domain.status.color)
-                                Text(domain.status.label).font(.phone(14)).foregroundStyle(Color.textMuted)
-                            }
-                        }
-                    }
-                    Button("Add Domain", systemImage: "plus") {
-                        newDomain = ""
-                        isAddingDomain = true
-                    }
-                } header: {
-                    Text("Your domains")
-                } footer: {
-                    if domains.isEmpty { Text("Add a domain you own to send and receive from it. You'll get the DNS records to add at your registrar.") }
-                }
-                .listRowBackground(Color.raised)
-
-                Section {
-                    LabeledContent("Server") {
-                        Text(model.session.server?.baseURL.host() ?? "").font(.phoneMono(14))
-                    }
-                    Button("Sign Out", role: .destructive) { isConfirmingSignOut = true }
-                        .foregroundStyle(Color.danger)
-                } footer: {
-                    Text("bMail \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
-                }
-                .listRowBackground(Color.raised)
+                accountsSection
+                labelsSection
+                domainsSection
+                serverSection
             }
             .font(.phone(16))
             .scrollContentBackground(.hidden)
@@ -144,6 +83,85 @@ struct SettingsView: View {
             }
         }
         .presentationBackground(Color.chrome)
+    }
+
+    // Split out of `body`: as one expression it takes the CI compiler too long to type-check.
+    private var accountsSection: some View {
+        Section("Accounts") {
+            ForEach(accounts) { account in
+                NavigationLink {
+                    AccountSettings(account: account, isCatchAll: isCatchAll(account))
+                } label: {
+                    AccountRow(account: account)
+                }
+            }
+            addAccount
+        }
+        .listRowBackground(Color.raised)
+    }
+
+    private func isCatchAll(_ account: Account) -> Bool {
+        domains.contains { $0.catchAllMailboxID == account.id }
+    }
+
+    private var labelsSection: some View {
+        Section {
+            ForEach(labels) { label in
+                Button {
+                    newLabelName = label.name
+                    renaming = label
+                } label: {
+                    Label(label.name, systemImage: "tag").foregroundStyle(Color.textPrimary)
+                }
+                .swipeActions {
+                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = label }
+                }
+            }
+        } header: {
+            Text("Labels")
+        } footer: {
+            if labels.isEmpty { Text("Label a conversation to create your first one.") }
+        }
+        .listRowBackground(Color.raised)
+    }
+
+    private var domainsSection: some View {
+        Section {
+            ForEach(domains) { domain in
+                NavigationLink {
+                    DomainSettings(domainID: domain.id)
+                } label: {
+                    HStack {
+                        Text(domain.name).font(.phone(16, .medium))
+                        Spacer()
+                        StatusDot(domain.status.color)
+                        Text(domain.status.label).font(.phone(14)).foregroundStyle(Color.textMuted)
+                    }
+                }
+            }
+            Button("Add Domain", systemImage: "plus") {
+                newDomain = ""
+                isAddingDomain = true
+            }
+        } header: {
+            Text("Your domains")
+        } footer: {
+            if domains.isEmpty { Text("Add a domain you own to send and receive from it. You'll get the DNS records to add at your registrar.") }
+        }
+        .listRowBackground(Color.raised)
+    }
+
+    private var serverSection: some View {
+        Section {
+            LabeledContent("Server") {
+                Text(model.session.server?.baseURL.host() ?? "").font(.phoneMono(14))
+            }
+            Button("Sign Out", role: .destructive) { isConfirmingSignOut = true }
+                .foregroundStyle(Color.danger)
+        } footer: {
+            Text("bMail \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+        }
+        .listRowBackground(Color.raised)
     }
 
     @ViewBuilder private var addAccount: some View {

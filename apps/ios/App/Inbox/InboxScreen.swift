@@ -42,18 +42,7 @@ private struct ConversationList: View {
         let tags = model.accountFilter == nil && query.accounts.count > 1 ? query.tags : [:]
         // Selection only while selecting: with it bound, a tap on a row picks it instead of opening it.
         List(selection: editMode.isEditing ? $picked : nil) {
-            // The large title, as the list's first row: iOS's own large title can't hold a menu you can tap.
-            VStack(alignment: .leading, spacing: 2) {
-                TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: true, isEnabled: !editMode.isEditing)
-                SyncLine(isLarge: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 16)
-            .padding(.bottom, 6)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(Color.canvas)
-            .selectionDisabled()
+            titleRow
             ForEach(query.conversations) { conversation in
                 NavigationLink(value: conversation.id) {
                     ConversationRow(
@@ -100,6 +89,21 @@ private struct ConversationList: View {
         .onChange(of: model.mailbox) { _, _ in stopPicking() }
         .onChange(of: model.accountFilter) { _, _ in stopPicking() }
         .sensoryFeedback(.selection, trigger: picked.count) { _, _ in editMode.isEditing }
+    }
+
+    /// The large title, as the list's first row: iOS's own large title can't hold a menu you can tap.
+    private var titleRow: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            TitleMenu(title: editMode.isEditing ? pickedTitle : model.title, isLarge: true, isEnabled: !editMode.isEditing)
+            SyncLine(isLarge: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 16)
+        .padding(.bottom, 6)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.canvas)
+        .selectionDisabled()
     }
 
     private var request: ConversationsRequest {
