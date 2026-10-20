@@ -65,17 +65,17 @@ public final class ServerConnection: Sendable {
         try await authenticate("sign-in/email", body: ["email": email, "password": password])
     }
 
-    /// Hands an ID token the app got from Google or Apple to Better Auth, which verifies it and opens a session.
-    public func signIn(provider: String, idToken: String, nonce: String? = nil) async throws {
+    /// Hands the ID token Sign in with Apple gave the app to Better Auth, which verifies it and opens a session.
+    public func signInWithApple(idToken: String, nonce: String) async throws {
         struct Body: Encodable {
             struct IDToken: Encodable {
                 var token: String
-                var nonce: String?
+                var nonce: String
             }
             var provider: String
             var idToken: IDToken
         }
-        try await authenticate("sign-in/social", body: Body(provider: provider, idToken: .init(token: idToken, nonce: nonce)))
+        try await authenticate("sign-in/social", body: Body(provider: "apple", idToken: .init(token: idToken, nonce: nonce)))
     }
 
     private func authenticate(_ path: String, body: some Encodable) async throws {

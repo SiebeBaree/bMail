@@ -38,7 +38,7 @@ pnpm --filter api password you@example.com
 
 This prints a password. Put it in your password manager. Running it again replaces the password and signs out every device that was signed in, which is also how you recover a lost one.
 
-Skip this step if you'll only sign in with Google or Apple.
+Skip this step if you'll only sign in with Apple.
 
 ### 5. Set up Resend and R2
 
@@ -53,25 +53,24 @@ In Cloudflare, create an R2 bucket and an R2 API token with Object Read & Write 
 
 Import the repository into Vercel with the root directory set to `apps/api`. Vercel picks the Fastify preset. Add these environment variables before the first deploy:
 
-| Variable                                                                 | Value                                                                                                        |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`                                                           | The Neon connection string from step 3                                                                       |
-| `ALLOWED_EMAILS`                                                         | Your email. Separate several with commas                                                                     |
-| `PUBLIC_URL`                                                             | `https://mail-api.example.com`                                                                               |
-| `BETTER_AUTH_SECRET`                                                     | Output of `openssl rand -base64 32`                                                                          |
-| `TRACKING_SECRET`                                                        | Another `openssl rand -base64 32`                                                                            |
-| `RESEND_API_KEY`                                                         | `re_...` from step 5                                                                                         |
-| `RESEND_WEBHOOK_SECRET`                                                  | `whsec_...` from step 5                                                                                      |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | From step 5                                                                                                  |
-| `GOOGLE_CLIENT_ID`                                                       | Optional. `120617231468-9n56accj81imqh2a7638n8hsstlfad5e.apps.googleusercontent.com` turns on Google sign-in |
-| `APPLE_BUNDLE_ID`                                                        | Optional. `be.baree.mail` turns on Sign in with Apple                                                        |
-| `SENTRY_DSN`                                                             | Optional                                                                                                     |
+| Variable                                                                 | Value                                                 |
+| ------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `DATABASE_URL`                                                           | The Neon connection string from step 3                |
+| `ALLOWED_EMAILS`                                                         | Your email. Separate several with commas              |
+| `PUBLIC_URL`                                                             | `https://mail-api.example.com`                        |
+| `BETTER_AUTH_SECRET`                                                     | Output of `openssl rand -base64 32`                   |
+| `TRACKING_SECRET`                                                        | Another `openssl rand -base64 32`                     |
+| `RESEND_API_KEY`                                                         | `re_...` from step 5                                  |
+| `RESEND_WEBHOOK_SECRET`                                                  | `whsec_...` from step 5                               |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | From step 5                                           |
+| `APPLE_BUNDLE_ID`                                                        | Optional. `be.baree.mail` turns on Sign in with Apple |
+| `SENTRY_DSN`                                                             | Optional                                              |
 
 Then add `mail-api.example.com` under the project's domains and point its DNS where Vercel tells you. `https://mail-api.example.com/health` should answer once it's live.
 
 ### 7. Install bMail and sign in
 
-Download the DMG from the [latest release](https://github.com/SiebeBaree/bMail/releases/latest) and drag bMail into Applications. Open it, enter `mail-api.example.com` as your server and sign in with the password from step 4, or with Google or Apple.
+Download the DMG from the [latest release](https://github.com/SiebeBaree/bMail/releases/latest) and drag bMail into Applications. Open it, enter `mail-api.example.com` as your server and sign in with the password from step 4, or with Apple.
 
 ### 8. Add your domain
 
@@ -81,7 +80,7 @@ In Settings, add your domain. bMail lists the DNS records it needs: Resend's rec
 
 Only the emails in `ALLOWED_EMAILS` can have an account, and nobody can sign up with a password. An account comes from one of two places:
 
-- Google or Apple, which have verified that you own the email.
+- Apple, which has verified that you own the email.
 - `pnpm --filter api password`, which needs your database's connection string.
 
 Anyone else who finds your api gets nowhere, even if they know your email.
@@ -96,7 +95,7 @@ xcodegen
 open Mail.xcodeproj
 ```
 
-Each app's `project.yml` is the source of truth for its Xcode project. Before building, set `DEVELOPMENT_TEAM` to your own team and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id you own, the same one in both. Gmail and Google sign-in need an iOS-type Google OAuth client for that bundle id. Put its id in `GOOGLE_CLIENT_ID` in both `project.yml` files and on your api.
+Each app's `project.yml` is the source of truth for its Xcode project. Before building, set `DEVELOPMENT_TEAM` to your own team and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id you own, the same one in both. Gmail needs an iOS-type Google OAuth client for that bundle id. Put its id in `GOOGLE_CLIENT_ID` in both `project.yml` files.
 
 ## Develop
 

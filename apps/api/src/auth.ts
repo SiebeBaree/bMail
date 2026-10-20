@@ -11,18 +11,17 @@ export type AuthOptions = {
     secret: string;
     /** Lowercased. Nobody outside this list can create an account, whichever way they sign in. */
     allowedEmails: string[];
-    /** Client ids whose Google ID tokens are accepted, i.e. the macOS app's desktop OAuth client. */
-    googleClientId?: string;
     /** The app's bundle id, the audience of the identity tokens Sign in with Apple hands the app. */
     appleBundleId?: string;
 };
 
 /**
- * Better Auth with three ways in: email and password, Google and Apple. The app is native, so every social sign-in is
- * an ID token the app obtained itself and posts to /api/auth/sign-in/social; no browser redirect ever ends here. The
- * bearer plugin returns the session token in the response and accepts it back as `Authorization: Bearer`.
+ * Better Auth with two ways in: email and password, and Apple. The app is native, so Sign in with Apple is an ID token
+ * the app obtained itself and posts to /api/auth/sign-in/social; no browser redirect ever ends here. The bearer plugin
+ * returns the session token in the response and accepts it back as `Authorization: Bearer`. Google only grants the app
+ * Gmail access and never signs in here.
  */
-export function createAuth({ db, baseURL, secret, allowedEmails, googleClientId, appleBundleId }: AuthOptions) {
+export function createAuth({ db, baseURL, secret, allowedEmails, appleBundleId }: AuthOptions) {
     return betterAuth({
         baseURL,
         secret,
@@ -34,18 +33,17 @@ export function createAuth({ db, baseURL, secret, allowedEmails, googleClientId,
         // Sign-in refuses unverified accounts, which shuts out any that an earlier sign-up made.
         emailAndPassword: { enabled: true, minPasswordLength: 10, disableSignUp: true, requireEmailVerification: true },
         socialProviders: {
-            // Client secrets are only used by the browser redirect flow, which this api never runs.
-            ...(googleClientId && { google: { clientId: googleClientId, clientSecret: "" } }),
+            // The client secret is only used by the browser redirect flow, which this api never runs.
             ...(appleBundleId && {
                 apple: { clientId: appleBundleId, clientSecret: "", appBundleIdentifier: appleBundleId },
             }),
         },
-        account: { accountLinking: { enabled: true, trustedProviders: ["google", "apple"] } },
+        account: { accountLinking: { enabled: true, trustedProviders: ["apple"] } },
         session: { expiresIn: 60 * 60 * 24 * 90, updateAge: 60 * 60 * 24 },
         databaseHooks: {
             user: {
                 create: {
-                    // Accounts come from Google or Apple, which verified the email, or from `setPassword` below.
+                    // Accounts come from Apple, which verified the email, or from `setPassword` below.
                     before: async (user) => {
                         const email = user.email.toLowerCase();
                         if (!allowedEmails.includes(email)) {
@@ -55,7 +53,7 @@ export function createAuth({ db, baseURL, secret, allowedEmails, googleClientId,
                         }
                         if (!user.emailVerified) {
                             throw new APIError("FORBIDDEN", {
-                                message: "Create your account with Google or Apple, or set a password on the server.",
+                                message: "Create your account with Apple, or set a password on the server.",
                             });
                         }
                     },
