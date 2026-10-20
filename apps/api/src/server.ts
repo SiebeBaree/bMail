@@ -29,7 +29,6 @@ export function getApp() {
             baseURL: env.PUBLIC_URL,
             secret: env.BETTER_AUTH_SECRET,
             allowedEmails: env.ALLOWED_EMAILS,
-            googleClientId: env.GOOGLE_CLIENT_ID,
             appleBundleId: env.APPLE_BUNDLE_ID,
         }),
         resend:

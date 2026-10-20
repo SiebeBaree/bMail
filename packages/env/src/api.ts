@@ -30,7 +30,6 @@ export const env = createEnv({
         BETTER_AUTH_SECRET: isProd
             ? z.string().min(32)
             : z.string().min(32).default("dev-only-secret-dev-only-secret-dev"),
-        GOOGLE_CLIENT_ID: z.string().min(1).optional(),
         APPLE_BUNDLE_ID: z.string().min(1).optional(),
 
         RESEND_API_KEY: isProd ? z.string().startsWith("re_") : z.string().startsWith("re_").optional(),

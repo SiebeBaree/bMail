@@ -6,12 +6,11 @@ import MailUI
 import Providers
 import SwiftUI
 
-/// Two steps. First your server: there is no shared one, so everyone signs in to the api they host. Then Apple, Google
-/// or email and password, all ending in a Better Auth session there. Social sign-in happens natively and only the
-/// resulting ID token goes to the server.
+/// Two steps. First your server: there is no shared one, so everyone signs in to the api they host. Then Apple or email
+/// and password, both ending in a Better Auth session there. Sign in with Apple happens natively and only the resulting
+/// ID token goes to the server. Google is for Gmail only and connects in Settings.
 struct SignInView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @Environment(\.colorScheme) private var colorScheme
     @State private var isChangingServer = false
     @State private var address = ""
@@ -93,13 +92,6 @@ struct SignInView: View {
         .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
         .frame(height: 52)
         .clipShape(.rect(cornerRadius: 14))
-
-        if BuildSettings.googleSignIn != nil {
-            Button(action: signInWithGoogle) {
-                Text("Continue with Google")
-            }
-            .buttonStyle(PhoneButtonStyle(.secondary))
-        }
 
         HStack(spacing: 12) {
             Hairline()
@@ -186,8 +178,6 @@ struct SignInView: View {
                 try await signIn(server)
                 Haptics.success()
                 model.session.start()
-            } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
-                return
             } catch {
                 Haptics.failure()
                 self.error = error.localizedDescription
@@ -200,23 +190,6 @@ struct SignInView: View {
         run { try await $0.signIn(email: email, password: password) }
     }
 
-    private func signInWithGoogle() {
-        guard let client = BuildSettings.googleSignIn else { return }
-        run { server in
-            let attempt = client.start()
-            let callback = try await webAuthenticationSession.authenticate(
-                using: attempt.url,
-                callback: .customScheme(attempt.callbackScheme),
-                preferredBrowserSession: .shared,
-                additionalHeaderFields: [:]
-            )
-            guard let idToken = try await client.finish(attempt, callback: callback).idToken else {
-                throw ProviderError(.rejected, "Google didn't confirm who you are. Try again.")
-            }
-            try await server.signIn(provider: "google", idToken: idToken)
-        }
-    }
-
     private func signInWithApple(_ result: Result<ASAuthorization, any Error>) {
         switch result {
         case let .success(authorization):
@@ -227,7 +200,7 @@ struct SignInView: View {
                 return
             }
             let nonce = appleNonce
-            run { try await $0.signIn(provider: "apple", idToken: token, nonce: nonce) }
+            run { try await $0.signInWithApple(idToken: token, nonce: nonce) }
         case let .failure(failure):
             if (failure as? ASAuthorizationError)?.code != .canceled { error = failure.localizedDescription }
         }
