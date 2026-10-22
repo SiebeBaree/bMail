@@ -18,6 +18,10 @@ export function DomainSettings() {
     return (
         <div className="px-10 pt-14 pb-10">
             <p className="text-[20px] font-semibold tracking-[-0.3px]">Settings</p>
+            <div className="mt-[18px] flex gap-[22px] border-b border-line">
+                <span className="-mb-px border-b-2 border-fg pb-2.5">General</span>
+                <span className="pb-2.5 text-muted">AI</span>
+            </div>
             <div className="mt-12 flex items-center justify-between border-b border-line pb-2.5">
                 <span className="text-[15px] font-semibold">Domains</span>
             </div>

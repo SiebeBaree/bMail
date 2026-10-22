@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "DesignSystem", targets: ["DesignSystem"]),
         .library(name: "MailCore", targets: ["MailCore"]),
         .library(name: "Providers", targets: ["Providers"]),
+        .library(name: "Assist", targets: ["Assist"]),
         .library(name: "MailUI", targets: ["MailUI"]),
         .library(name: "Agents", targets: ["Agents"]),
     ],
@@ -52,10 +53,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "Assist",
+            dependencies: ["MailCore"]
+        ),
+        .target(
             name: "MailUI",
             dependencies: [
                 "DesignSystem",
                 "MailCore",
+                "Assist",
                 "Providers",
                 .product(name: "SQLiteData", package: "sqlite-data"),
             ]
@@ -71,6 +77,7 @@ let package = Package(
         ),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
         .testTarget(name: "MailUITests", dependencies: ["MailUI", "MailCore"]),
+        .testTarget(name: "AssistTests", dependencies: ["Assist", "MailCore"]),
         .testTarget(
             name: "AgentsTests",
             dependencies: ["Agents", "MailCore", "MailUI", .product(name: "MCP", package: "swift-sdk")]

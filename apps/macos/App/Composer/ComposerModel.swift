@@ -41,8 +41,8 @@ final class ComposerModel {
     /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
     var accountID: Account.ID? {
         didSet {
-            guard accountID != oldValue, let swapped = Signatures.swapped(in: String(body.characters), from: oldValue, to: accountID) else { return }
-            body = AttributedString(swapped)
+            guard accountID != oldValue, let swapped = Signatures.swapped(in: String(text.body.characters), from: oldValue, to: accountID) else { return }
+            text.body = AttributedString(swapped)
         }
     }
     var to: [Address] = []
@@ -50,8 +50,8 @@ final class ComposerModel {
     var bcc: [Address] = []
     var showsCopies = false
     var subject = ""
-    var body = AttributedString()
-    var selection = AttributedTextSelection()
+    /// The body, with Tab's gray suggestion after the cursor.
+    let text = ComposerText(keyCap: "Tab")
     /// The message being answered or forwarded, sent below the body and collapsed while writing.
     var quoted: Quote?
     var showsQuote = false
@@ -67,6 +67,12 @@ final class ComposerModel {
         self.mode = mode
         self.conversationID = conversationID
         self.messageID = messageID
+        text.suggest = app.session.completion { [weak self] in
+            Completion.Draft(
+                accountID: self?.accountID, to: self?.to ?? [], subject: self?.subject ?? "",
+                replyingTo: self.flatMap { $0.mode == .reply || $0.mode == .replyAll ? $0.conversationID : nil }
+            )
+        }?.suggest
     }
 
     /// New mail and forwards take the reader's place; replies open under the conversation they answer. An agent's
@@ -90,7 +96,7 @@ final class ComposerModel {
     static func new(app: AppModel, mailto: URL? = nil) -> ComposerModel {
         let model = ComposerModel(app: app, mode: .new, conversationID: UUID())
         model.accountID = app.accountFilter ?? model.accounts.first?.id
-        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.text.moveToStart()
         if let mailto, let components = URLComponents(url: mailto, resolvingAgainstBaseURL: false) {
             model.to = components.path.split(separator: ",").map { Address(email: String($0)) }
             model.subject = components.queryItems?.first { $0.name.lowercased() == "subject" }?.value ?? ""
@@ -113,7 +119,7 @@ final class ComposerModel {
         model.showsCopies = !response.cc.isEmpty
         model.subject = response.subject
         model.quoted = response.quote
-        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.text.moveToStart()
         model.showsQuote = mode == .forward
         return model
     }
@@ -134,8 +140,8 @@ final class ComposerModel {
         model.bcc = draft.bcc
         model.showsCopies = !draft.cc.isEmpty || !draft.bcc.isEmpty
         model.subject = draft.subject
-        model.body = AttributedString(draft.text)
-        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.text.body = AttributedString(draft.text)
+        model.text.moveToStart()
         model.quoted = draft.quote
         model.showsQuote = mode == .forward
         return model
@@ -183,7 +189,7 @@ final class ComposerModel {
             error = "\(invalid.email) isn't an email address."
             return
         }
-        let rendered = BodySerializer(context: fontContext).render(body)
+        let rendered = BodySerializer(context: fontContext).render(text.body)
         let quote = quoted?.appendix
         let message = OutgoingMessage(
             id: messageID,

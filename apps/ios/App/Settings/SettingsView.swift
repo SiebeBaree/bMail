@@ -29,6 +29,7 @@ struct SettingsView: View {
             List {
                 accountsSection
                 labelsSection
+                aiSection
                 domainsSection
                 serverSection
             }
@@ -121,6 +122,19 @@ struct SettingsView: View {
             Text("Labels")
         } footer: {
             if labels.isEmpty { Text("Label a conversation to create your first one.") }
+        }
+        .listRowBackground(Color.raised)
+    }
+
+    private var aiSection: some View {
+        Section {
+            NavigationLink {
+                AISettingsView()
+            } label: {
+                Label("AI", systemImage: "sparkle").foregroundStyle(Color.textPrimary)
+            }
+        } footer: {
+            Text("Suggestions while you write and auto labelling, on your own key.")
         }
         .listRowBackground(Color.raised)
     }

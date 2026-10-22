@@ -223,10 +223,31 @@ public struct MessageEvent: Hashable, Identifiable, Sendable {
 public struct MailLabel: Hashable, Identifiable, Sendable {
     public let id: UUID
     public var name: String
+    /// What belongs under it, in your words. Auto labelling only applies labels that have one.
+    public var description: String?
 
-    public init(id: UUID, name: String) {
+    public init(id: UUID, name: String, description: String? = nil) {
         self.id = id
         self.name = name
+        self.description = description
+    }
+}
+
+/// Which labels auto labelling put on a conversation, kept on this device. One row per conversation it looked at, even
+/// when it applied none, so it looks once. A label it applied that's gone now is a correction it learns from.
+@Table
+public struct LabelDecision: Hashable, Identifiable, Sendable {
+    @Column(primaryKey: true)
+    public var conversationID: Conversation.ID
+    @Column(as: [MailLabel.ID].JSONRepresentation.self)
+    public var labelIDs: [MailLabel.ID]
+    public var decidedAt: Date
+    public var id: Conversation.ID { conversationID }
+
+    public init(conversationID: Conversation.ID, labelIDs: [MailLabel.ID], decidedAt: Date) {
+        self.conversationID = conversationID
+        self.labelIDs = labelIDs
+        self.decidedAt = decidedAt
     }
 }
 

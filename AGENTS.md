@@ -40,6 +40,7 @@ Api modules are tested by injecting requests into a fully built app on PGlite (i
 - `MailCore`: the SQLite cache (GRDB + SQLiteData), `MailStore` (every write), `MailSyncEngine` (pull, push, outbox) and the provider protocol.
 - `APIClient`: generated at build time from `openapi.json` by swift-openapi-generator.
 - `Providers`: `ServerProvider` for your domains, `GmailProvider`, OAuth with PKCE and a MIME builder.
+- `Assist`: AI on your own key. The provider client (Anthropic's Messages, Chat Completions for OpenAI, OpenRouter and Vercel AI Gateway), the settings and the prompts for tab completion and auto labelling.
 - `MailUI`: what both apps' views share: `MailSession`, the queries behind the list and the reader, message rendering and its tracker blocking (`MailPages`), and the composer's rules.
 - `Agents` (Mac only): the MCP server agents on your Mac connect to, its tools and the access level of each account.
 
@@ -62,6 +63,7 @@ Run the Mac app against a local api: start the api (`PORT=4317 PUBLIC_URL=http:/
 - The iPhone app ships through TestFlight from Xcode: archive the `Mail` scheme in `apps/ios` and upload it. Both apps share the bundle id `be.baree.mail`, so one App ID carries Sign in with Apple and one Google client serves both.
 - Agents reach mail through `Agents`: MCP on `127.0.0.1:6245/mcp` with the bearer token from Settings, built on the official Swift SDK with a fresh SDK server per request. Each account's level (Off, Read, Organize, Ask to send, Send) is checked on every call, and an account at Off must not show up anywhere. The tools only decide; the app carries out their effects through `MailSession`, so agent actions get the same toasts, undo and send window as yours. Ask to send opens the message in the composer and posts a notification that can send it.
 - On iPhone a message body is pinned to the reader's width and scaled down when it's wider (`EmailDocument.fitScript`). Pages load ahead of time while off screen, where WebKit would lay them out 980 points wide.
+- AI runs on the device with the user's own key, never through the api. Tab completion keeps the gray suggestion in the editor's text (`ComposerText`) and every edit takes it back out, so `body` never holds it. Auto labelling runs after each sync pass on new inbox mail, only with labels that have a description (synced through the api). The `labelDecisions` table remembers what it applied, so a label you take off becomes a correction in the next prompt.
 - There is no shared server. Everyone hosts their own api (README) and enters its address on the sign-in screen, which checks `/health` before switching.
 - Fastify scoping matters: cross-cutting plugins use `fastify-plugin`, the error handler is registered before route modules and private routes live in the scope that adds the `authenticate` hook.
 - The api has no build step. Locally tsx runs the TS source; on Vercel the Fastify preset compiles `app.ts` and calls its default export.

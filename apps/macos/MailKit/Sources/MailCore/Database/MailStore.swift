@@ -88,7 +88,7 @@ public struct MailStore: Sendable {
             // Deleting accounts and domains cascades to their conversations and messages.
             for table in [
                 "accounts", "domains", "pendingMutations", "outboxItems", "syncCursors", "contacts", "messageTexts", "labels",
-                "conversationLabels", "trackedSends", "messageEvents",
+                "conversationLabels", "trackedSends", "messageEvents", "labelDecisions",
             ] {
                 try db.execute(sql: #"DELETE FROM "\#(table)""#)
             }
@@ -130,6 +130,19 @@ public struct MailStore: Sendable {
     public func recordFailedAttempt(_ id: PendingMutation.ID) throws {
         try database.write { db in
             try PendingMutation.find(id).update { $0.attempts += 1 }.execute(db)
+        }
+    }
+
+    /// Puts the labels auto labelling picked on a conversation and remembers it looked, in one go. The labels are
+    /// mutations like yours, so they reach the api the same way.
+    public func recordLabelDecision(_ labelIDs: [MailLabel.ID], on conversationID: Conversation.ID) throws {
+        try database.write { db in
+            try LabelDecision.upsert { LabelDecision(conversationID: conversationID, labelIDs: labelIDs, decidedAt: Date()) }.execute(db)
+            for labelID in labelIDs {
+                let mutation = Mutation.label(conversationID, labelID, true)
+                try apply(mutation, in: db)
+                try PendingMutation.insert { PendingMutation.Draft(mutation: mutation, attempts: 0, createdAt: Date()) }.execute(db)
+            }
         }
     }
 

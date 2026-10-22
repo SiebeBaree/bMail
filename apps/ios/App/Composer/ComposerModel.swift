@@ -23,8 +23,8 @@ final class ComposerModel: Identifiable {
     /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
     var accountID: Account.ID? {
         didSet {
-            guard accountID != oldValue, let swapped = Signatures.swapped(in: String(body.characters), from: oldValue, to: accountID) else { return }
-            body = AttributedString(swapped)
+            guard accountID != oldValue, let swapped = Signatures.swapped(in: String(text.body.characters), from: oldValue, to: accountID) else { return }
+            text.body = AttributedString(swapped)
         }
     }
     var to: [Address] = []
@@ -35,8 +35,8 @@ final class ComposerModel: Identifiable {
     /// Cc, Bcc and From folded into one line until you need them.
     var showsCopies = false
     var subject = ""
-    var body = AttributedString()
-    var selection = AttributedTextSelection()
+    /// The body, with the gray suggestion the button above the keyboard accepts.
+    let text = ComposerText()
     /// The message being answered or forwarded, sent below the body and folded away while writing.
     var quoted: Quote?
     var showsQuote = false
@@ -53,6 +53,13 @@ final class ComposerModel: Identifiable {
         self.accounts = app.session.accounts
         self.mode = mode
         self.conversationID = conversationID
+        text.suggest = app.session.completion { [weak self] in
+            let replying = self.map { $0.mode == .response(.reply) || $0.mode == .response(.replyAll) } ?? false
+            return Completion.Draft(
+                accountID: self?.accountID, to: self?.to ?? [], subject: self?.subject ?? "",
+                replyingTo: replying ? self?.conversationID : nil
+            )
+        }?.suggest
     }
 
     var account: Account? { accounts.first { $0.id == accountID } }
@@ -68,7 +75,7 @@ final class ComposerModel: Identifiable {
     /// Whether closing would lose something you did, so it asks first.
     var hasContent: Bool {
         let signature = accountID.map(Signatures.text(for:)) ?? ""
-        let written = String(body.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+        let written = String(text.body.characters).trimmingCharacters(in: .whitespacesAndNewlines)
         let typed = !written.isEmpty && written != signature
         if case .new = mode {
             return typed || !to.isEmpty || !cc.isEmpty || !bcc.isEmpty || !subject.isEmpty || !attachments.isEmpty
@@ -85,10 +92,10 @@ final class ComposerModel: Identifiable {
             model.to = components.path.split(separator: ",").map { Address(email: String($0)) }
             model.subject = components.queryItems?.first { $0.name.lowercased() == "subject" }?.value ?? ""
             if let text = components.queryItems?.first(where: { $0.name.lowercased() == "body" })?.value {
-                model.body = AttributedString(text + String(model.body.characters))
+                model.text.body = AttributedString(text + String(model.text.body.characters))
             }
         }
-        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.text.moveToStart()
         return model
     }
 
@@ -106,7 +113,7 @@ final class ComposerModel: Identifiable {
         model.subject = response.subject
         model.quoted = response.quote
         model.showsQuote = mode == .forward
-        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.text.moveToStart()
         return model
     }
 
@@ -176,7 +183,7 @@ final class ComposerModel: Identifiable {
             error = "\(invalid.email) isn't an email address."
             return false
         }
-        let rendered = BodySerializer(context: fontContext).render(body)
+        let rendered = BodySerializer(context: fontContext).render(text.body)
         let quote = quoted?.appendix
         let message = OutgoingMessage(
             id: messageID,

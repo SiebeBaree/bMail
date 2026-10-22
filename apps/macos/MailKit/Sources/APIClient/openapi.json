@@ -108,11 +108,13 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 50
+          },
+          "description": {
+            "nullable": true,
+            "type": "string",
+            "maxLength": 500
           }
-        },
-        "required": [
-          "name"
-        ]
+        }
       },
       "SetConversationLabelsInput": {
         "type": "object",
@@ -620,6 +622,10 @@
           "name": {
             "type": "string"
           },
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time",
@@ -635,6 +641,7 @@
         "required": [
           "id",
           "name",
+          "description",
           "createdAt",
           "deletedAt"
         ]

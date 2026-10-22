@@ -20,6 +20,7 @@ struct ComposerView: View {
     enum Field: Hashable { case subject, body }
 
     var body: some View {
+        @Bindable var text = model.text
         NavigationStack {
             ScrollView {
                 VStack(spacing: 0) {
@@ -50,11 +51,13 @@ struct ComposerView: View {
                     }
                     subjectRow
                     if model.trackingEnabled { trackingNote }
-                    TextEditor(text: $model.body, selection: $model.selection)
+                    TextEditor(text: $text.editorText, selection: $text.selection)
                         .font(.phone(16))
                         .scrollContentBackground(.hidden)
                         .scrollDisabled(true)
                         .focused($focus, equals: .body)
+                        // A hardware keyboard's Tab accepts the suggestion, like on the Mac.
+                        .onKeyPress(.tab) { model.text.accept() ? .handled : .ignored }
                         .frame(minHeight: 220, alignment: .topLeading)
                         .padding(.horizontal, 11)
                         .padding(.top, 6)
@@ -80,6 +83,7 @@ struct ComposerView: View {
             if case let .success(urls) = result { model.attach(urls) }
         }
         .onChange(of: photos) { _, items in attach(items) }
+        .onChange(of: focus) { _, focus in if focus != .body { model.text.dismissSuggestion() } }
         .animation(.snappy(duration: 0.25), value: model.error)
         .onAppear {
             if model.to.isEmpty { recipientFocus = .to } else { focus = .body }
@@ -107,7 +111,19 @@ struct ComposerView: View {
             .disabled(!canSend)
             .accessibilityLabel("Send")
         }
-        ToolbarItemGroup(placement: .keyboard) { extras }
+        ToolbarItemGroup(placement: .keyboard) {
+            extras
+            if model.text.suggestion != nil {
+                Button {
+                    model.text.accept()
+                    Haptics.tap()
+                } label: {
+                    Label("Accept", systemImage: "arrow.right.to.line")
+                        .labelStyle(.titleAndIcon)
+                }
+                .accessibilityLabel("Accept suggestion")
+            }
+        }
         ToolbarItemGroup(placement: .bottomBar) { extras }
     }
 

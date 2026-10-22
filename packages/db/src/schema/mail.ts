@@ -238,6 +238,7 @@ export const labels = pgTable(
         id: uuid().primaryKey(),
         ...synced,
         name: text().notNull(),
+        description: text(),
         deletedAt: timestamp({ withTimezone: true }),
     },
     // Partial and case-insensitive, so `Work` and `work` can't both exist but a removed name can be used again.

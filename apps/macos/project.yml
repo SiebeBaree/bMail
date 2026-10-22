@@ -36,6 +36,8 @@ targets:
       - package: MailKit
         product: Providers
       - package: MailKit
+        product: Assist
+      - package: MailKit
         product: MailUI
       - package: MailKit
         product: Agents
