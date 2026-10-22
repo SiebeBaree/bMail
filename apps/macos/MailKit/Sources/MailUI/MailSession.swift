@@ -347,13 +347,14 @@ public final class MailSession {
     public static let undoWindow = 10
 
     /// Holds the message for the undo window, then the sync engine sends it. Undo takes it out of the outbox and calls
-    /// `reopen`, which brings back the composer it came from.
-    public func send(_ message: OutgoingMessage, reopen: @escaping @MainActor () -> Void) {
+    /// `reopen`, which brings back the composer it came from. `detail` goes under the countdown, to say who wrote it.
+    public func send(_ message: OutgoingMessage, detail: String? = nil, reopen: @escaping @MainActor () -> Void) {
         do {
             try store.enqueue(message, sendAt: Date().addingTimeInterval(TimeInterval(Self.undoWindow)))
             engine.wake()
             let toast = Toast(
                 "Sending in \(Self.undoWindow)s",
+                detail: detail,
                 symbol: "paperplane",
                 action: .init("Undo", key: "Z") { [weak self] in self?.cancelSend(message.id, reopen: reopen) },
                 duration: .seconds(Self.undoWindow)

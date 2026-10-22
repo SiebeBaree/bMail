@@ -14,8 +14,11 @@ struct ComposerView: View {
     var body: some View {
         VStack(spacing: 0) {
             if model.replacesReader {
-                HStack {
+                HStack(spacing: 8) {
                     Text(model.title).font(.uiSemibold)
+                    if let draft = model.draft {
+                        Text("Written by \(draft.agent)").foregroundStyle(Color.textMuted)
+                    }
                     Spacer()
                     Text("Discard").foregroundStyle(Color.textMuted)
                     KeyCap("Esc")
@@ -30,7 +33,7 @@ struct ComposerView: View {
                 RecipientField(label: "Cc", addresses: $model.cc)
                 RecipientField(label: "Bcc", addresses: $model.bcc)
             }
-            if model.mode == .new || model.mode == .forward {
+            if model.mode == .new || model.mode == .forward || model.draft != nil {
                 HStack(spacing: 12) {
                     Text("Subject").foregroundStyle(Color.textMuted).frame(width: 56, alignment: .leading)
                     TextField("", text: $model.subject)

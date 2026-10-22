@@ -364,8 +364,8 @@ func snippet(of text: String) -> String {
     String(text.split(whereSeparator: \.isWhitespace).joined(separator: " ").prefix(200))
 }
 
-/// Good enough for a search index: tags out, entities for spaces and the common characters decoded.
-func plainText(_ html: String) -> String {
+/// Good enough for a search index or an agent: tags out, entities for spaces and the common characters decoded.
+public func plainText(_ html: String) -> String {
     html
         .replacingOccurrences(of: #"<(style|script)[^>]*>[\s\S]*?</\1>"#, with: " ", options: .regularExpression)
         .replacingOccurrences(of: "<[^>]+>", with: " ", options: .regularExpression)

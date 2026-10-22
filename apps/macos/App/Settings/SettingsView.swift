@@ -18,6 +18,7 @@ struct SettingsView: View {
                 AccountsSection(isDomainFieldFocused: $isDomainFieldFocused)
                 LabelsSection()
                 DomainsSection(isDomainFieldFocused: $isDomainFieldFocused)
+                AgentsSection()
             }
             .padding(.horizontal, 40)
             .padding(.top, 56)

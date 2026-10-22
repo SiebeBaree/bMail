@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "MailCore", targets: ["MailCore"]),
         .library(name: "Providers", targets: ["Providers"]),
         .library(name: "MailUI", targets: ["MailUI"]),
+        .library(name: "Agents", targets: ["Agents"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
@@ -19,6 +20,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.13.0"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-http-types", from: "1.4.0"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk", from: "0.12.1"),
     ],
     targets: [
         .target(
@@ -58,8 +60,21 @@ let package = Package(
                 .product(name: "SQLiteData", package: "sqlite-data"),
             ]
         ),
+        .target(
+            name: "Agents",
+            dependencies: [
+                "MailCore",
+                "MailUI",
+                .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "SQLiteData", package: "sqlite-data"),
+            ]
+        ),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
         .testTarget(name: "MailUITests", dependencies: ["MailUI", "MailCore"]),
+        .testTarget(
+            name: "AgentsTests",
+            dependencies: ["Agents", "MailCore", "MailUI", .product(name: "MCP", package: "swift-sdk")]
+        ),
         .testTarget(
             name: "ProvidersTests",
             dependencies: [

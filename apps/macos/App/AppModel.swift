@@ -1,3 +1,4 @@
+import Agents
 import AppKit
 import DesignSystem
 import Foundation
@@ -5,6 +6,7 @@ import MailCore
 import MailUI
 import Observation
 import OSLog
+import SwiftUI
 
 private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands")
 
@@ -14,6 +16,10 @@ private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands"
 @Observable
 final class AppModel {
     let session = MailSession(google: BuildSettings.google)
+    let agents: AgentServer
+    @ObservationIgnored private let notifications = AgentNotifications()
+    /// Messages agents wrote at Ask to send, oldest first. The first opens in the composer as soon as it's free.
+    @ObservationIgnored private var agentDrafts: [AgentDraft] = []
     @ObservationIgnored private var keyboard: KeyboardRouter?
     @ObservationIgnored private var markReadTask: Task<Void, Never>?
 
@@ -44,7 +50,17 @@ final class AppModel {
             selection = listOrder.first
         }
     }
-    var composer: ComposerModel?
+    var composer: ComposerModel? {
+        didSet {
+            if let old = oldValue, old !== composer, let draft = old.draft {
+                // Sent or discarded, an agent's message is done. Pushed aside by another composer, it waits its turn again.
+                if composer == nil { notifications.remove(draft.id) } else { agentDrafts.insert(draft, at: 0) }
+            }
+            if composer == nil, !agentDrafts.isEmpty {
+                Task { self.openNextDraft() }
+            }
+        }
+    }
     var isPaletteOpen = false
     var isShortcutsOpen = false
     var isLabelPickerOpen = false
@@ -58,6 +74,9 @@ final class AppModel {
 
     init() {
         Typography.register()
+        agents = AgentServer(session: session)
+        agents.review = { [weak self] draft in self?.review(draft) }
+        notifications.send = { [weak self] id in self?.sendDraft(id) }
         keyboard = KeyboardRouter { [weak self] command in self?.perform(command) ?? false }
         keyboard?.start()
         session.openLink = { [weak self] url in self?.open(url) }
@@ -79,6 +98,8 @@ final class AppModel {
 
     func signOut() async {
         await session.signOut()
+        agents.forget()
+        agentDrafts = []
         selection = nil
     }
 
@@ -206,6 +227,34 @@ final class AppModel {
     /// Undo brings back the composer the message came from, exactly as it was.
     func send(_ message: OutgoingMessage, from composer: ComposerModel) {
         session.send(message) { [weak self] in self?.composer = composer }
+    }
+
+    // MARK: - Agents
+
+    /// A message an agent wrote at Ask to send. It opens in the composer once that's free, and its notification can send
+    /// it from anywhere.
+    private func review(_ draft: AgentDraft) {
+        agentDrafts.append(draft)
+        notifications.post(draft)
+        if composer != nil {
+            session.toasts.show(Toast("\(draft.agent) wrote a message", detail: "It opens when you're done with this one.", symbol: "envelope"))
+        }
+        openNextDraft()
+    }
+
+    private func openNextDraft() {
+        guard composer == nil, !agentDrafts.isEmpty else { return }
+        composer = ComposerModel.drafted(agentDrafts.removeFirst(), app: self)
+    }
+
+    /// Send from the notification: what's in the composer if the message is open there, otherwise what the agent wrote.
+    private func sendDraft(_ id: Message.ID) {
+        if let composer, composer.draft?.id == id {
+            composer.send(fontContext: EnvironmentValues().fontResolutionContext)
+        } else if let index = agentDrafts.firstIndex(where: { $0.id == id }) {
+            let draft = agentDrafts.remove(at: index)
+            session.send(draft.message, detail: "Written by \(draft.agent)") { [weak self] in self?.review(draft) }
+        }
     }
 
     // MARK: - Attachments
