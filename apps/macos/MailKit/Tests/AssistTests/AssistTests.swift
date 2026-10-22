@@ -39,6 +39,28 @@ import Testing
         #expect(gateway["max_tokens"] != nil)
     }
 
+    @Test func eachProviderSaysHowHardToThinkItsOwnWay() throws {
+        let deepSeekOff = try json(.deepSeek, reasoning: .off)
+        #expect((deepSeekOff["thinking"] as? [String: String]) == ["type": "disabled"])
+        #expect(deepSeekOff["reasoning_effort"] == nil)
+        let deepSeekMax = try json(.deepSeek, reasoning: .max)
+        #expect((deepSeekMax["thinking"] as? [String: String]) == ["type": "enabled"])
+        #expect(deepSeekMax["reasoning_effort"] as? String == "max")
+
+        let gemini = try json(.google, reasoning: .auto)
+        #expect(gemini["reasoning_effort"] == nil && gemini["thinking"] == nil && gemini["reasoning"] == nil)
+        #expect(try json(.mistral, reasoning: .off)["reasoning_effort"] as? String == "none")
+    }
+
+    @Test func everyProviderDefaultsToReasoningItCanExpress() {
+        for provider in AIProvider.allCases {
+            #expect(provider.reasoningLevels.contains(provider.defaultReasoning(fast: true)))
+            #expect(provider.reasoningLevels.contains(provider.defaultReasoning(fast: false)))
+        }
+        #expect(AIProvider.anthropic.defaultReasoning(fast: false) == .xhigh)
+        #expect(AIProvider.anthropic.defaultReasoning(fast: true) == .off)
+    }
+
     @Test func readsTheAnswerAndTheProvidersError() async throws {
         let session = StubProtocol.session { request in
             if request.url?.path().hasSuffix("/messages") == true {
@@ -52,6 +74,16 @@ import Testing
         await #expect(throws: AIError.self) {
             try await AIClient(provider: .openAI, key: "k", session: session).complete(request)
         }
+    }
+}
+
+@Suite struct LogoTests {
+    @Test func aModelShowsItsMakersMark() {
+        #expect(Logo.of(model: "anthropic/claude-haiku-5.5", on: .openRouter) == .claude)
+        #expect(Logo.of(model: "claude-haiku-5-5", on: .anthropic) == .claude)
+        #expect(Logo.of(model: "openai/gpt-oss-120b", on: .groq) == .openAI)
+        #expect(Logo.of(model: "z-ai/glm-5.2", on: .vercel) == .zAI)
+        #expect(Logo.of(model: "something-new", on: .mistral) == .mistral)
     }
 }
 

@@ -51,7 +51,7 @@ final class ComposerModel {
     var showsCopies = false
     var subject = ""
     /// The body, with Tab's gray suggestion after the cursor.
-    let text = ComposerText()
+    let text = ComposerText(hint: "⇥ Tab")
     /// The message being answered or forwarded, sent below the body and collapsed while writing.
     var quoted: Quote?
     var showsQuote = false

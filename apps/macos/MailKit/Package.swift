@@ -54,7 +54,8 @@ let package = Package(
         ),
         .target(
             name: "Assist",
-            dependencies: ["MailCore"]
+            dependencies: ["MailCore"],
+            resources: [.process("Logos")]
         ),
         .target(
             name: "MailUI",

@@ -173,15 +173,6 @@ struct ComposerView: View {
                     .lineLimit(1)
             }
             Spacer()
-            if model.text.suggestion != nil {
-                Button { model.text.accept() } label: {
-                    HStack(spacing: 8) {
-                        Text("Accept")
-                        KeyCap("Tab")
-                    }
-                }
-                .buttonStyle(.ghost)
-            }
             Button {
                 model.send(fontContext: fontContext)
             } label: {

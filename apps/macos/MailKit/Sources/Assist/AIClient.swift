@@ -21,6 +21,22 @@ public struct AIRequest: Sendable {
     }
 }
 
+/// A model the key can use. The name is the provider's own where it gives one (Anthropic, OpenRouter, Vercel).
+public struct AIModel: Hashable, Identifiable, Sendable {
+    public let id: String
+    public let name: String?
+
+    public init(id: String, name: String?) {
+        self.id = id
+        self.name = name
+    }
+
+    /// Whether the id or the name contains what was typed.
+    public func matches(_ search: String) -> Bool {
+        id.localizedCaseInsensitiveContains(search) || (name?.localizedCaseInsensitiveContains(search) ?? false)
+    }
+}
+
 public struct AIError: LocalizedError, Sendable {
     public let message: String
     public var errorDescription: String? { message }
@@ -54,10 +70,13 @@ public struct AIClient: Sendable {
         return response.choices.first?.message.content ?? ""
     }
 
-    /// Every model the key can use, by id.
-    public func models() async throws -> [String] {
+    /// Every model the key can use.
+    public func models() async throws -> [AIModel] {
         let data = try await send(authorized(provider == .anthropic ? "models?limit=1000" : "models"))
-        return try JSONDecoder().decode(ModelList.self, from: data).data.map(\.id).sorted()
+        return try JSONDecoder().decode(ModelList.self, from: data).data
+            // Gemini lists its models as `models/gemini-…` but takes the bare id.
+            .map { AIModel(id: $0.id.replacingOccurrences(of: "models/", with: ""), name: $0.display_name ?? $0.name) }
+            .sorted { $0.id < $1.id }
     }
 
     /// One tiny request to the model, timed, so Settings can say the key works and how fast the model answers.
@@ -80,30 +99,38 @@ public struct AIClient: Sendable {
     func body(for request: AIRequest) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        let thinkingRoom = request.reasoning == .off ? 0 : 32_000
-        switch provider {
-        case .anthropic:
+        let reasoning = request.reasoning
+        let maxTokens = request.maxTokens + (reasoning == .off ? 0 : 32_000)
+        if provider == .anthropic {
             return try encoder.encode(MessagesBody(
                 model: request.model,
-                max_tokens: request.maxTokens + thinkingRoom,
+                max_tokens: maxTokens,
                 system: [.init(text: request.system)],
                 messages: [.init(role: "user", content: request.prompt)],
                 // Haiku 5.5 only turns thinking off at effort high or below, which the default medium is.
-                thinking: .init(type: request.reasoning == .off ? "disabled" : "adaptive"),
-                output_config: request.reasoning == .off ? nil : .init(effort: request.reasoning.rawValue)
-            ))
-        case .openAI, .openRouter, .vercel:
-            let effort = request.reasoning == .off ? "none" : request.reasoning.rawValue
-            let isOpenAI = provider == .openAI
-            return try encoder.encode(ChatBody(
-                model: request.model,
-                messages: [.init(role: "system", content: request.system), .init(role: "user", content: request.prompt)],
-                max_completion_tokens: isOpenAI ? request.maxTokens + thinkingRoom : nil,
-                max_tokens: isOpenAI ? nil : request.maxTokens + thinkingRoom,
-                reasoning_effort: isOpenAI ? effort : nil,
-                reasoning: isOpenAI ? nil : .init(effort: effort)
+                thinking: .init(type: reasoning == .off ? "disabled" : "adaptive"),
+                output_config: reasoning == .off || reasoning == .auto ? nil : .init(effort: reasoning.rawValue)
             ))
         }
+        var body = ChatBody(
+            model: request.model,
+            messages: [.init(role: "system", content: request.system), .init(role: "user", content: request.prompt)]
+        )
+        if provider == .openAI { body.max_completion_tokens = maxTokens } else { body.max_tokens = maxTokens }
+        // Each provider has its own way to say how hard to think. `.auto` sends nothing and leaves it to the model.
+        switch (provider, reasoning) {
+        case (_, .auto): break
+        case (.openRouter, _), (.vercel, _):
+            body.reasoning = .init(effort: reasoning == .off ? "none" : reasoning.rawValue)
+        case (.deepSeek, .off), (.zAI, .off), (.moonshot, .off):
+            body.thinking = .init(type: "disabled")
+        case (.deepSeek, _):
+            body.thinking = .init(type: "enabled")
+            body.reasoning_effort = reasoning.rawValue
+        default:
+            body.reasoning_effort = reasoning == .off ? "none" : reasoning.rawValue
+        }
+        return try encoder.encode(body)
     }
 
     private func authorized(_ path: String) -> URLRequest {
@@ -170,6 +197,7 @@ private struct ChatBody: Encodable {
     }
 
     struct ReasoningOptions: Encodable { var effort: String }
+    struct Thinking: Encodable { var type: String }
 
     var model: String
     var messages: [Message]
@@ -177,6 +205,7 @@ private struct ChatBody: Encodable {
     var max_tokens: Int?
     var reasoning_effort: String?
     var reasoning: ReasoningOptions?
+    var thinking: Thinking?
 }
 
 private struct ChatResponse: Decodable {
@@ -185,7 +214,12 @@ private struct ChatResponse: Decodable {
 }
 
 private struct ModelList: Decodable {
-    struct Model: Decodable { var id: String }
+    struct Model: Decodable {
+        var id: String
+        var display_name: String?
+        var name: String?
+    }
+
     var data: [Model]
 }
 

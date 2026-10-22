@@ -19,7 +19,9 @@ struct AISettingsView: View {
         List {
             Section {
                 Picker("Provider", selection: $ai.provider) {
-                    ForEach(AIProvider.allCases, id: \.self) { Text($0.title).tag($0) }
+                    ForEach(AIProvider.allCases, id: \.self) { provider in
+                        Label { Text(provider.title) } icon: { provider.logo.image }.tag(provider)
+                    }
                 }
                 SecureField("API key", text: $ai.key)
                     .textInputAutocapitalization(.never)
@@ -85,11 +87,14 @@ struct AISettingsView: View {
             ModelPicker(choice: choice, provider: provider, key: model.session.ai.key)
         } label: {
             LabeledContent("Model") {
-                Text(choice.wrappedValue.model).font(.phoneMono(14)).lineLimit(1)
+                HStack(spacing: 6) {
+                    LogoView(Logo.of(model: choice.wrappedValue.model, on: provider))
+                    Text(choice.wrappedValue.model).font(.phoneMono(14)).lineLimit(1)
+                }
             }
         }
         Picker("Reasoning", selection: choice.reasoning) {
-            ForEach(Reasoning.allCases, id: \.self) { Text($0.title).tag($0) }
+            ForEach(provider.reasoningLevels, id: \.self) { Text($0.title).tag($0) }
         }
     }
 
@@ -117,21 +122,25 @@ private struct ModelPicker: View {
     let provider: AIProvider
     let key: String
     @Environment(\.dismiss) private var dismiss
-    @State private var models: [String] = []
+    @State private var models: [AIModel] = []
     @State private var search = ""
 
     var body: some View {
         List {
             let typed = search.trimmingCharacters(in: .whitespaces)
-            if !typed.isEmpty, !models.contains(typed) {
+            if !typed.isEmpty, !models.contains(where: { $0.id == typed }) {
                 Button("Use \u{201C}\(typed)\u{201D}") { pick(typed) }
             }
-            ForEach(models.filter { typed.isEmpty || $0.localizedCaseInsensitiveContains(typed) }, id: \.self) { id in
-                Button { pick(id) } label: {
-                    HStack {
-                        Text(id).font(.phoneMono(14)).foregroundStyle(Color.textPrimary)
+            ForEach(models.filter { typed.isEmpty || $0.matches(typed) }) { model in
+                Button { pick(model.id) } label: {
+                    HStack(spacing: 12) {
+                        LogoView(Logo.of(model: model.id, on: provider), size: 20)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(model.name ?? model.id).foregroundStyle(Color.textPrimary)
+                            if model.name != nil { Text(model.id).font(.phoneMono(12)).foregroundStyle(Color.textMuted) }
+                        }
                         Spacer()
-                        if id == choice.model { Image(systemName: "checkmark").foregroundStyle(Color.accent) }
+                        if model.id == choice.model { Image(systemName: "checkmark").foregroundStyle(Color.accent) }
                     }
                 }
             }

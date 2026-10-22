@@ -96,12 +96,10 @@ public final class AISettings {
 
     private static func choice(_ feature: Feature, for provider: AIProvider) -> ModelChoice {
         if let data = UserDefaults.standard.data(forKey: "ai.\(provider.rawValue).\(feature.rawValue)"),
-            let choice = try? JSONDecoder().decode(ModelChoice.self, from: data) {
+            let choice = try? JSONDecoder().decode(ModelChoice.self, from: data), provider.reasoningLevels.contains(choice.reasoning) {
             return choice
         }
-        // Completion has to keep up with your typing, so it doesn't think. Labelling happens in the background and
-        // gets it right more often when it does.
-        return ModelChoice(model: provider.defaultModel, reasoning: feature == .completion ? .off : .xhigh)
+        return ModelChoice(model: provider.defaultModel, reasoning: provider.defaultReasoning(fast: feature == .completion))
     }
 
     private func save(_ choice: ModelChoice, _ feature: Feature) {

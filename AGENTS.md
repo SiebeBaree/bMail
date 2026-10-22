@@ -40,7 +40,7 @@ Api modules are tested by injecting requests into a fully built app on PGlite (i
 - `MailCore`: the SQLite cache (GRDB + SQLiteData), `MailStore` (every write), `MailSyncEngine` (pull, push, outbox) and the provider protocol.
 - `APIClient`: generated at build time from `openapi.json` by swift-openapi-generator.
 - `Providers`: `ServerProvider` for your domains, `GmailProvider`, OAuth with PKCE and a MIME builder.
-- `Assist`: AI on your own key. The provider client (Anthropic's Messages, Chat Completions for OpenAI, OpenRouter and Vercel AI Gateway), the settings and the prompts for tab completion and auto labelling.
+- `Assist`: AI on your own key. The provider client (Anthropic's Messages, Chat Completions for everyone else, each with its own reasoning parameter), provider and model logos from LobeHub's icon set, the settings and the prompts for tab completion and auto labelling.
 - `MailUI`: what both apps' views share: `MailSession`, the queries behind the list and the reader, message rendering and its tracker blocking (`MailPages`), and the composer's rules.
 - `Agents` (Mac only): the MCP server agents on your Mac connect to, its tools and the access level of each account.
 

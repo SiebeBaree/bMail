@@ -26,8 +26,12 @@ public final class ComposerText {
     @ObservationIgnored private var lastReconciled: String?
     @ObservationIgnored private var shown: (body: AttributedString, suggestion: Suggestion, text: AttributedString)?
 
-    public init(_ body: AttributedString = AttributedString()) {
+    /// What follows the gray text to say which key accepts it. The iPhone has a button above the keyboard instead.
+    @ObservationIgnored private let hint: String?
+
+    public init(_ body: AttributedString = AttributedString(), hint: String? = nil) {
         self.body = body
+        self.hint = hint
     }
 
     /// What the editor shows and edits. The same copy every time until something changes, because a selection only
@@ -120,7 +124,7 @@ public final class ComposerText {
             guard let answer = await suggest(before, after), !Task.isCancelled, self.suggestion == nil,
                 String(self.body.characters) == text, self.cursorOffset == cursor
             else { return }
-            self.suggestion = Suggestion(text: answer, offset: cursor)
+            self.suggestion = Suggestion(text: answer, offset: cursor, hint: self.hint)
             self.place(cursor)
         }
     }
@@ -152,15 +156,29 @@ public final class ComposerText {
 public struct Suggestion: Equatable, Sendable {
     public var text: String
     public var offset: Int
+    /// Plain text on purpose: the editor drops images and draws a background the full height of the line.
+    public var hint: String?
 
-    /// How many characters it takes up in the editor.
-    var length: Int { text.count }
+    public init(text: String, offset: Int, hint: String? = nil) {
+        self.text = text
+        self.offset = offset
+        self.hint = hint
+    }
 
-    /// The body with the suggestion in it, gray.
+    /// How many characters it takes up in the editor: the text and the hint after it.
+    var length: Int { text.count + (hint.map { $0.count + 1 } ?? 0) }
+
+    /// The body with the suggestion in it, gray, and the hint after it.
     func display(in body: AttributedString) -> AttributedString {
         var shown = body
         var gray = AttributedString(text)
         gray.foregroundColor = Color.textFaint
+        if let hint {
+            var small = AttributedString(" \(hint)")
+            small.foregroundColor = Color.textMuted
+            small.font = .keyCap
+            gray += small
+        }
         shown.insert(gray, at: shown.characters.index(shown.startIndex, offsetBy: offset))
         return shown
     }
