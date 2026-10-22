@@ -42,12 +42,12 @@ public final class Completion {
         guard let session else { return nil }
         let draft = draft()
         guard let account = session.accounts.first(where: { $0.id == draft.accountID }) else { return nil }
-        let thread = draft.replyingTo.map { thread(of: $0, in: session) } ?? []
+        let earlier = draft.replyingTo.map { messages(of: $0, in: session) } ?? []
         // A new message with nothing in it yet gives the model nothing to go on.
-        guard !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !thread.isEmpty else { return nil }
+        guard !before.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !earlier.isEmpty else { return nil }
         let prompt = CompletionPrompt.prompt(
             from: Address(name: account.displayName, email: account.address), to: draft.to, subject: draft.subject,
-            thread: thread, before: before, after: after, today: .now
+            thread: earlier, before: before, after: after, today: .now
         )
         let request = AIRequest(
             model: choice.model, reasoning: choice.reasoning, system: system(for: account, to: draft.to, in: session),
@@ -85,7 +85,7 @@ public final class Completion {
     }
 
     /// The last few messages, oldest first.
-    private func thread(of id: Conversation.ID, in session: MailSession) -> [Message] {
+    private func messages(of id: Conversation.ID, in session: MailSession) -> [Message] {
         let messages = (try? session.store.database.read { db in
             try Message.where { $0.conversationID.eq(id) }.order { $0.sentAt.desc() }.limit(4).fetchAll(db)
         }) ?? []
