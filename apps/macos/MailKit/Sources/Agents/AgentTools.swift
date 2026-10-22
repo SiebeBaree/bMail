@@ -437,8 +437,9 @@ extension [String: Value] {
         self[key]?.boolValue ?? false
     }
 
+    /// Agents may send a whole number as 20.0 or 1e300. `Int(_:)` traps on one too big for an Int, so that's nil.
     fileprivate func int(_ key: String) -> Int? {
-        self[key]?.intValue ?? self[key]?.doubleValue.map { Int($0) }
+        self[key]?.intValue ?? self[key]?.doubleValue.flatMap { Int(exactly: $0.rounded(.towardZero)) }
     }
 
     /// A list of strings. A single string counts as a list of one, which is what agents often send.

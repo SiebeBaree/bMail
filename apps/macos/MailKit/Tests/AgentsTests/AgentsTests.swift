@@ -43,6 +43,7 @@ import Testing
         let tools = tools([work.id: .read])
 
         #expect(try tools.list().map(\.name) == ["list_accounts", "list_conversations", "read_conversation"])
+        #expect(try tools.call("list_conversations", arguments: ["limit": 1e300], agent: "Claude").text.contains(numbers.id.uuidString))
         #expect(try tools.call("read_conversation", arguments: ["id": .string(numbers.id.uuidString)], agent: "Claude").text.contains("Can you check these?"))
         #expect(throws: AgentError("bMail only lets agents read \(work.address).")) {
             try tools.call("update_conversations", arguments: ["ids": .string(numbers.id.uuidString), "action": "done"], agent: "Claude")
@@ -167,6 +168,7 @@ import Testing
         #expect(request.method == "POST")
         #expect(request.path == "/mcp")
         #expect(request.body == Data("abcd".utf8))
+        #expect(HTTPRequest.parse(Data("POST /mcp HTTP/1.1\r\nContent-Length: -1\r\n\r\n".utf8)) == nil)
     }
 
     private actor Effects {

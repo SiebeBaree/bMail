@@ -242,7 +242,8 @@ struct HTTPReply: Sendable {
 }
 
 extension HTTPRequest {
-    /// The request in `data`, the bytes received so far. Nil until the headers and the whole body are in.
+    /// The request in `data`, the bytes received so far. Nil until the headers and the whole body are in, and for a
+    /// malformed request, which then waits for the client to hang up or the size cap.
     static func parse(_ data: Data) -> HTTPRequest? {
         guard let end = data.firstRange(of: Data("\r\n\r\n".utf8)) else { return nil }
         let lines = String(decoding: data[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
@@ -254,7 +255,8 @@ extension HTTPRequest {
             headers[line[..<colon].trimmingCharacters(in: .whitespaces)] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
         let request = HTTPRequest(method: String(start[0]), headers: headers)
-        let length = request.header("Content-Length").flatMap(Int.init) ?? 0
+        // This runs before the token check, and `prefix` traps on a negative length.
+        guard let length = Int(request.header("Content-Length") ?? "0"), length >= 0 else { return nil }
         let body = data[end.upperBound...]
         guard body.count >= length else { return nil }
         return HTTPRequest(

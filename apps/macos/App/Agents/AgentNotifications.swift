@@ -20,7 +20,8 @@ final class AgentNotifications: NSObject, UNUserNotificationCenterDelegate {
             UNNotificationCategory(
                 identifier: Self.category,
                 actions: [
-                    UNNotificationAction(identifier: "send", title: "Send"),
+                    // Not from the lock screen: only you approve what goes out.
+                    UNNotificationAction(identifier: "send", title: "Send", options: .authenticationRequired),
                     UNNotificationAction(identifier: "review", title: "Review", options: .foreground),
                 ],
                 intentIdentifiers: []
