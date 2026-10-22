@@ -37,6 +37,8 @@ targets:
         product: Providers
       - package: MailKit
         product: MailUI
+      - package: MailKit
+        product: Agents
     settings:
       base:
         PRODUCT_NAME: bMail

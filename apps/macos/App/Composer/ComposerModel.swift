@@ -1,3 +1,4 @@
+import Agents
 import AppKit
 import Foundation
 import MailCore
@@ -34,7 +35,9 @@ final class ComposerModel {
     let mode: Mode
     /// The existing conversation for a reply, a fresh one for anything else.
     let conversationID: Conversation.ID
-    let messageID = UUID()
+    let messageID: Message.ID
+    /// The message an agent wrote, when this is one waiting for you at Ask to send.
+    private(set) var draft: AgentDraft?
     /// Switching accounts swaps the signature under the body, as long as it's still the one that was put there.
     var accountID: Account.ID? {
         didSet {
@@ -58,15 +61,17 @@ final class ComposerModel {
 
     @ObservationIgnored private weak var app: AppModel?
 
-    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID) {
+    private init(app: AppModel, mode: Mode, conversationID: Conversation.ID, messageID: Message.ID = UUID()) {
         self.app = app
         self.accounts = app.session.accounts
         self.mode = mode
         self.conversationID = conversationID
+        self.messageID = messageID
     }
 
-    /// New mail and forwards take the reader's place; replies open under the conversation they answer.
-    var replacesReader: Bool { mode == .new || mode == .forward }
+    /// New mail and forwards take the reader's place; replies open under the conversation they answer. An agent's
+    /// message takes it too, so it's on screen whatever conversation is open.
+    var replacesReader: Bool { mode == .new || mode == .forward || draft != nil }
 
     /// Read once when the composer opens: the app's list is a database read on every access.
     let accounts: [Account]
@@ -109,6 +114,29 @@ final class ComposerModel {
         model.subject = response.subject
         model.quoted = response.quote
         model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.showsQuote = mode == .forward
+        return model
+    }
+
+    /// A message an agent wrote at Ask to send, to read, change and send yourself.
+    static func drafted(_ draft: AgentDraft, app: AppModel) -> ComposerModel {
+        let mode: Mode = switch draft.mode {
+        case .reply: .reply
+        case .replyAll: .replyAll
+        case .forward: .forward
+        case nil: .new
+        }
+        let model = ComposerModel(app: app, mode: mode, conversationID: draft.conversationID, messageID: draft.id)
+        model.draft = draft
+        model.accountID = draft.account.id
+        model.to = draft.to
+        model.cc = draft.cc
+        model.bcc = draft.bcc
+        model.showsCopies = !draft.cc.isEmpty || !draft.bcc.isEmpty
+        model.subject = draft.subject
+        model.body = AttributedString(draft.text)
+        model.selection = AttributedTextSelection(range: model.body.startIndex..<model.body.startIndex)
+        model.quoted = draft.quote
         model.showsQuote = mode == .forward
         return model
     }

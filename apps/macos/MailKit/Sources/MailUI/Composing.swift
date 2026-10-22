@@ -89,11 +89,20 @@ public struct BodySerializer {
             if let link = run.link { fragment = #"<a href="\#(Self.escape(link.absoluteString))">\#(fragment)</a>"# }
             html += fragment
         }
+        return Self.document(html, text: String(body.characters))
+    }
+
+    /// Plain text, the way the composer sends it when nothing is formatted. For mail an agent wrote.
+    public static func render(plainText text: String) -> (html: String, text: String) {
+        document(escape(text), text: text)
+    }
+
+    private static func document(_ html: String, text: String) -> (html: String, text: String) {
         let paragraphs = html
             .components(separatedBy: "\n\n")
             .map { "<p style=\"margin:0 0 12px\">\($0.replacingOccurrences(of: "\n", with: "<br>"))</p>" }
             .joined()
-        return (#"<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6">\#(paragraphs)</div>"#, String(body.characters))
+        return (#"<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.6">\#(paragraphs)</div>"#, text)
     }
 
     static func escape(_ text: String) -> String {

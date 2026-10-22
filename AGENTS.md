@@ -41,6 +41,7 @@ Api modules are tested by injecting requests into a fully built app on PGlite (i
 - `APIClient`: generated at build time from `openapi.json` by swift-openapi-generator.
 - `Providers`: `ServerProvider` for your domains, `GmailProvider`, OAuth with PKCE and a MIME builder.
 - `MailUI`: what both apps' views share: `MailSession`, the queries behind the list and the reader, message rendering and its tracker blocking (`MailPages`), and the composer's rules.
+- `Agents` (Mac only): the MCP server agents on your Mac connect to, its tools and the access level of each account.
 
 Each app target holds its views, grouped by feature, plus `AppModel`. The Mac's adds `Command` (the keymap that drives keys, the palette, the shortcut sheet and the menu bar). The iPhone's is built for touch: swipes and long presses instead of keys, a sheet for the composer and toasts in a window of their own so they show over sheets.
 
@@ -59,6 +60,7 @@ Run the Mac app against a local api: start the api (`PORT=4317 PUBLIC_URL=http:/
 - Better Auth runs with the bearer plugin; the native app never has cookies. Only `ALLOWED_EMAILS` can have an account, and only with a proven email: Apple verified it, or `pnpm --filter api password` created it, which takes the database. Password sign-up is off because it proves nothing, and any account can spend the operator's Resend account.
 - Releases come from tags. Pushing `v1.2.3` runs `.github/workflows/release.yml`, which builds on the `xcode-27` runner, signs with the Developer ID certificate, notarizes and attaches `bMail-1.2.3.dmg` to a GitHub release. The version comes from the tag, not `project.yml`.
 - The iPhone app ships through TestFlight from Xcode: archive the `Mail` scheme in `apps/ios` and upload it. Both apps share the bundle id `be.baree.mail`, so one App ID carries Sign in with Apple and one Google client serves both.
+- Agents reach mail through `Agents`: MCP on `127.0.0.1:6245/mcp` with the bearer token from Settings, built on the official Swift SDK with a fresh SDK server per request. Each account's level (Off, Read, Organize, Ask to send, Send) is checked on every call, and an account at Off must not show up anywhere. The tools only decide; the app carries out their effects through `MailSession`, so agent actions get the same toasts, undo and send window as yours. Ask to send opens the message in the composer and posts a notification that can send it.
 - On iPhone a message body is pinned to the reader's width and scaled down when it's wider (`EmailDocument.fitScript`). Pages load ahead of time while off screen, where WebKit would lay them out 980 points wide.
 - There is no shared server. Everyone hosts their own api (README) and enters its address on the sign-in screen, which checks `/health` before switching.
 - Fastify scoping matters: cross-cutting plugins use `fastify-plugin`, the error handler is registered before route modules and private routes live in the scope that adds the `authenticate` hook.
