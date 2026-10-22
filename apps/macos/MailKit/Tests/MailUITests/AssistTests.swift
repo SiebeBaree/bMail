@@ -6,7 +6,7 @@ import Testing
 @testable import MailUI
 
 @Suite struct SuggestionTests {
-    let suggestion = Suggestion(text: "rld peace", offset: 8, keyCap: "Tab")
+    let suggestion = Suggestion(text: "rld peace", offset: 8)
     let body = AttributedString("Hello wo\nBest")
 
     /// What the editor would write back after `edit` on the shown text.

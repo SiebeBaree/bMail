@@ -20,10 +20,7 @@ struct AISettingsPage: View {
                         .toggleStyle(.mailSwitch)
                         .accessibilityLabel("Tab completion")
                 }
-                FeatureRow(
-                    detail: "Finishes your sentences in gray as you write. Tab accepts.",
-                    choice: $ai.completion, provider: ai.provider, key: ai.key
-                )
+                ModelRows(choice: $ai.completion, provider: ai.provider, key: ai.key, reasoningNote: "Off is fastest.")
                 LearningRow()
             }
             VStack(alignment: .leading, spacing: 0) {
@@ -32,10 +29,7 @@ struct AISettingsPage: View {
                         .toggleStyle(.mailSwitch)
                         .accessibilityLabel("Auto labelling")
                 }
-                FeatureRow(
-                    detail: "Puts your labels on new mail in the inbox when it fits their description. Takes a label off and it learns.",
-                    choice: $ai.labelling, provider: ai.provider, key: ai.key
-                )
+                ModelRows(choice: $ai.labelling, provider: ai.provider, key: ai.key, reasoningNote: nil)
                 LabelDescriptions()
             }
         }
@@ -58,64 +52,47 @@ private struct ProviderSection: View {
     var body: some View {
         @Bindable var ai = model.session.ai
         VStack(alignment: .leading, spacing: 0) {
-            SettingsHeader(title: "Provider") { EmptyView() }
-            HStack(spacing: 8) {
-                Button { isOpen.toggle() } label: {
-                    HStack(spacing: 6) {
-                        Text(ai.provider.title)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
-                    }
-                }
-                .buttonStyle(.secondary)
-                .dropdown(isPresented: $isOpen) {
-                    ForEach(AIProvider.allCases, id: \.self) { provider in
-                        Button {
-                            isOpen = false
-                            ai.provider = provider
-                        } label: {
-                            HStack {
-                                Text(provider.title)
-                                Spacer(minLength: 16)
-                                if provider == ai.provider {
-                                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
-                                }
+            SettingsHeader(title: "Provider") {
+                Button { isOpen.toggle() } label: { DropdownLabel(ai.provider.title) }
+                    .buttonStyle(.secondary)
+                    .dropdown(isPresented: $isOpen, alignment: .trailing) {
+                        ForEach(AIProvider.allCases, id: \.self) { provider in
+                            DropdownOption(provider.title, isSelected: provider == ai.provider) {
+                                isOpen = false
+                                ai.provider = provider
                             }
                         }
-                        .buttonStyle(.dropdownItem)
                     }
-                }
-                SecureField("\(ai.provider.title) API key", text: $ai.key)
-                    .textFieldStyle(.field)
-                    .onSubmit(check)
-                Button(status == .checking ? "Checking" : "Check", action: check)
-                    .buttonStyle(.secondary)
-                    .disabled(ai.key.isEmpty || status == .checking)
             }
-            .padding(.top, 16)
-            HStack(spacing: 6) {
-                switch status {
-                case .connected(let milliseconds):
-                    StatusDot(.success)
-                    Text("Connected, \(milliseconds) ms")
-                case .failed(let message):
-                    StatusDot(.danger)
-                    Text(message)
-                case .checking, nil:
-                    if let problem = model.session.aiProblem {
-                        StatusDot(.danger)
-                        Text(problem)
-                    } else {
-                        Text("Kept in this Mac's keychain. Mail goes from here to \(ai.provider.title), never through your server.")
-                            .foregroundStyle(Color.textMuted)
-                        Link("Get a key", destination: ai.provider.keysURL).foregroundStyle(Color.link)
-                    }
+            SettingRow("API key", note: keyNote(ai)) {
+                HStack(spacing: 8) {
+                    SecureField("Paste your key", text: $ai.key)
+                        .textFieldStyle(.field)
+                        .frame(width: 240)
+                        .onSubmit(check)
+                    Button(status == .checking ? "Checking" : "Check", action: check)
+                        .buttonStyle(.secondary)
+                        .disabled(ai.key.isEmpty || status == .checking)
                 }
             }
-            .lineLimit(2)
-            .padding(.top, 10)
         }
         .onChange(of: ai.provider) { _, _ in status = nil }
         .onChange(of: ai.key) { _, _ in status = nil }
+    }
+
+    /// What's known about the key: the last check, the last thing that went wrong, or where to get one.
+    private func keyNote(_ ai: AISettings) -> Text {
+        switch status {
+        case let .connected(milliseconds): return Text("Connected, \(milliseconds) ms")
+        case let .failed(message): return Text(message).foregroundStyle(Color.danger)
+        case .checking, nil:
+            if let problem = model.session.aiProblem { return Text(problem).foregroundStyle(Color.danger) }
+            // From a String, so the link is read as markdown.
+            if ai.key.isEmpty {
+                return Text(LocalizedStringKey("In this Mac's keychain, never on your server. [Get a key](\(ai.provider.keysURL.absoluteString))"))
+            }
+            return Text("In this Mac's keychain, never on your server.")
+        }
     }
 
     private func check() {
@@ -133,73 +110,53 @@ private struct ProviderSection: View {
     }
 }
 
-/// What a feature does, and the model and reasoning it uses.
-private struct FeatureRow: View {
-    let detail: String
+/// The model a feature uses and how hard it thinks.
+private struct ModelRows: View {
     @Binding var choice: ModelChoice
     let provider: AIProvider
     let key: String
-    @State private var modelID = ""
+    let reasoningNote: String?
     @State private var models: [String] = []
     @State private var isModelsOpen = false
     @State private var isReasoningOpen = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(detail).foregroundStyle(Color.textMuted)
-            HStack(spacing: 8) {
-                Text("Model").foregroundStyle(Color.textSecondary).frame(width: 72, alignment: .leading)
-                TextField(provider.defaultModel, text: $modelID)
-                    .textFieldStyle(.field)
-                    .font(.meta)
-                    .frame(width: 260)
-                    .onSubmit(saveModel)
-                Button { isModelsOpen.toggle() } label: {
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
-                }
-                .buttonStyle(.ghost)
-                .disabled(matches.isEmpty)
-                .help("Models your key can use")
-                .dropdown(isPresented: $isModelsOpen) {
-                        ForEach(matches, id: \.self) { id in
-                            Button(id) {
-                                isModelsOpen = false
-                                modelID = id
-                                choice.model = id
-                            }
-                            .buttonStyle(.dropdownItem)
-                        }
-                    }
-                Text("Reasoning").foregroundStyle(Color.textSecondary).padding(.leading, 12)
-                Button { isReasoningOpen.toggle() } label: {
-                    HStack(spacing: 6) {
-                        Text(choice.reasoning.title)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
-                    }
-                }
+        SettingRow("Model") {
+            Button { isModelsOpen.toggle() } label: { DropdownLabel(choice.model, mono: true) }
                 .buttonStyle(.secondary)
-                .dropdown(isPresented: $isReasoningOpen) {
-                    ForEach(Reasoning.allCases, id: \.self) { level in
-                        Button {
-                            isReasoningOpen = false
-                            choice.reasoning = level
-                        } label: {
-                            HStack {
-                                Text(level.title)
-                                Spacer(minLength: 16)
-                                if level == choice.reasoning {
-                                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                .dropdown(isPresented: $isModelsOpen, alignment: .trailing) {
+                    if models.isEmpty {
+                        Text(key.isEmpty ? "Add your key to see models" : "Loading models")
+                            .foregroundStyle(Color.textMuted)
+                            .padding(.horizontal, 8)
+                            .frame(minHeight: 32)
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 0) {
+                                ForEach(models, id: \.self) { id in
+                                    DropdownOption(id, isSelected: id == choice.model, mono: true) {
+                                        isModelsOpen = false
+                                        choice.model = id
+                                    }
                                 }
                             }
                         }
-                        .buttonStyle(.dropdownItem)
+                        .frame(width: 320, height: min(CGFloat(models.count) * 32, 320))
                     }
                 }
-            }
         }
-        .padding(.vertical, 16)
-        .onAppear { modelID = choice.model }
-        .onChange(of: choice.model) { _, model in modelID = model }
+        SettingRow("Reasoning", note: reasoningNote) {
+            Button { isReasoningOpen.toggle() } label: { DropdownLabel(choice.reasoning.title) }
+                .buttonStyle(.secondary)
+                .dropdown(isPresented: $isReasoningOpen, alignment: .trailing) {
+                    ForEach(Reasoning.allCases, id: \.self) { level in
+                        DropdownOption(level.title, isSelected: level == choice.reasoning) {
+                            isReasoningOpen = false
+                            choice.reasoning = level
+                        }
+                    }
+                }
+        }
         .task(id: "\(provider.rawValue).\(key)") {
             models = []
             // Waits out the typing of a key, so each keystroke isn't a request.
@@ -208,57 +165,29 @@ private struct FeatureRow: View {
             models = (try? await AIClient(provider: provider, key: key).models()) ?? []
         }
     }
-
-    /// Models whose id contains what's typed, so a gateway's long list stays short.
-    private var matches: [String] {
-        let typed = modelID.trimmingCharacters(in: .whitespaces).lowercased()
-        return Array(models.filter { typed.isEmpty || $0.lowercased().contains(typed) }.prefix(12))
-    }
-
-    private func saveModel() {
-        let id = modelID.trimmingCharacters(in: .whitespaces)
-        isModelsOpen = false
-        choice.model = id.isEmpty ? provider.defaultModel : id
-    }
 }
 
-/// Learning mode, until there's enough of your own mail to sound like you.
+/// Only while there's too little sent mail to write like you.
 private struct LearningRow: View {
     @FetchOne(Message.where { $0.direction.eq(Direction.outbound) }.count()) private var sent = 0
 
     var body: some View {
-        HStack(spacing: 6) {
-            if sent >= CompletionPrompt.minimumSentMails {
-                StatusDot(.success)
-                Text("Writes like you, from \(sent) emails you sent.")
-            } else {
-                StatusDot(.warning)
-                Text("Learning. Suggestions start once you've sent \(CompletionPrompt.minimumSentMails) emails, \(sent) so far.")
-            }
+        if sent < CompletionPrompt.minimumSentMails {
+            SettingRow("Learning your style", note: "Starts after \(CompletionPrompt.minimumSentMails) sent emails. \(sent) so far.")
         }
-        .foregroundStyle(Color.textSecondary)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 
-/// What belongs under each label, in your words. Only labels with a description are applied by AI.
+/// What belongs under each label, in your words. Only described labels are applied.
 private struct LabelDescriptions: View {
     @FetchAll(MailLabel.order(by: \.name)) private var labels
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(labels) { LabelDescriptionRow(label: $0) }
-            if labels.isEmpty {
-                HStack(spacing: 6) {
-                    Text("Press").foregroundStyle(Color.textMuted)
-                    KeyCap("L")
-                    Text("on a conversation to create your first label.").foregroundStyle(Color.textMuted)
-                }
-                .padding(.vertical, 16)
-            }
-        }
+        SettingRow(
+            "Labels",
+            note: labels.isEmpty ? "Press L on a conversation to create one." : "AI only uses labels you've described. Labels you remove become corrections."
+        )
+        ForEach(labels) { LabelDescriptionRow(label: $0) }
     }
 }
 
@@ -269,19 +198,18 @@ private struct LabelDescriptionRow: View {
     @State private var error: String?
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Image(systemName: "tag").font(.system(size: 11)).foregroundStyle(Color.textMuted).frame(width: 28)
-            Text(label.name).font(.uiMedium).frame(width: 140, alignment: .leading).lineLimit(1)
-            VStack(alignment: .leading, spacing: 4) {
-                TextField("What belongs here, so AI can use it", text: $text, axis: .vertical)
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            Text(label.name).frame(width: 160, alignment: .leading).lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                TextField("What belongs here", text: $text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .foregroundStyle(Color.textSecondary)
                     .lineLimit(1...4)
-                if let error { Text(error).foregroundStyle(Color.danger) }
+                if let error { Text(error).font(.geist(12)).foregroundStyle(Color.danger) }
             }
         }
-        .padding(.vertical, 15)
-        .overlay(alignment: .bottom) { Hairline() }
+        .padding(.vertical, 16)
+        .overlay(alignment: .top) { Hairline() }
         .onAppear { text = label.description ?? "" }
         // Saved once you stop typing, like a signature.
         .task(id: text) {
@@ -297,5 +225,49 @@ private struct LabelDescriptionRow: View {
                 self.error = error.localizedDescription
             }
         }
+    }
+}
+
+/// A dropdown button's label: the current value and a chevron.
+private struct DropdownLabel: View {
+    let title: String
+    let mono: Bool
+
+    init(_ title: String, mono: Bool = false) {
+        self.title = title
+        self.mono = mono
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title).font(mono ? .meta : .uiMedium)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+        }
+    }
+}
+
+/// One choice in a dropdown, with a check on the current one.
+private struct DropdownOption: View {
+    let title: String
+    let isSelected: Bool
+    let mono: Bool
+    let action: () -> Void
+
+    init(_ title: String, isSelected: Bool, mono: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.isSelected = isSelected
+        self.mono = mono
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title).font(mono ? .meta : .ui)
+                Spacer(minLength: 16)
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).opacity(isSelected ? 1 : 0)
+            }
+        }
+        .buttonStyle(.dropdownItem)
     }
 }

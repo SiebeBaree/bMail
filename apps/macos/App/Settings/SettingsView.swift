@@ -94,6 +94,39 @@ struct SettingsHeader<Action: View>: View {
     }
 }
 
+/// One setting: what it is on the left, with a short note under it, and its control on the right.
+struct SettingRow<Control: View>: View {
+    let title: String
+    let note: Text?
+    @ViewBuilder let control: () -> Control
+
+    init(_ title: String, note: String? = nil, @ViewBuilder control: @escaping () -> Control = { EmptyView() }) {
+        self.title = title
+        self.note = note.map { Text($0) }
+        self.control = control
+    }
+
+    init(_ title: String, note: Text, @ViewBuilder control: @escaping () -> Control = { EmptyView() }) {
+        self.title = title
+        self.note = note
+        self.control = control
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let note { note.font(.geist(12)).foregroundStyle(Color.textMuted) }
+            }
+            Spacer()
+            control()
+        }
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+        .overlay(alignment: .top) { Hairline() }
+    }
+}
+
 /// A button that asks once more before something that can't be undone.
 struct ConfirmButton: View {
     let title: String

@@ -30,11 +30,9 @@ struct AISettingsView: View {
                 if let message = status ?? model.session.aiProblem {
                     Text(message).font(.phone(14)).foregroundStyle(Color.textSecondary)
                 }
-            } header: {
-                Text("Provider")
             } footer: {
                 // From a String, so the link in it is read as markdown.
-                Text(LocalizedStringKey("Kept in this iPhone's keychain. Mail goes from here to \(ai.provider.title), never through your server. [Get a key](\(ai.provider.keysURL.absoluteString))"))
+                Text(LocalizedStringKey("Saved in this iPhone's keychain. Requests go straight from here, not through your server. [Get a key](\(ai.provider.keysURL.absoluteString))"))
             }
             .listRowBackground(Color.raised)
 
@@ -45,9 +43,9 @@ struct AISettingsView: View {
                 Text("Writing")
             } footer: {
                 if sent >= CompletionPrompt.minimumSentMails {
-                    Text("Finishes your sentences in gray as you write, like you would, from \(sent) emails you sent. Accept sits above the keyboard.")
+                    Text("Suggests the next words as you write. Tap Accept above the keyboard to keep them.")
                 } else {
-                    Text("Learning. Suggestions start once you've sent \(CompletionPrompt.minimumSentMails) emails, \(sent) so far.")
+                    Text("Learning your style. Starts after \(CompletionPrompt.minimumSentMails) sent emails. \(sent) so far.")
                 }
             }
             .listRowBackground(Color.raised)
@@ -58,7 +56,7 @@ struct AISettingsView: View {
             } header: {
                 Text("Labels")
             } footer: {
-                Text("Puts your labels on new mail in the inbox when it fits their description. Take a label off and it learns.")
+                Text("Labels new inbox mail that matches a description below. Labels you remove become corrections.")
             }
             .listRowBackground(Color.raised)
 
@@ -72,6 +70,7 @@ struct AISettingsView: View {
             }
         }
         .font(.phone(16))
+        .tint(Color.accent)
         .scrollContentBackground(.hidden)
         .background(Color.chrome)
         .navigationTitle("AI")

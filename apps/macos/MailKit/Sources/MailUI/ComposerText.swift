@@ -19,8 +19,6 @@ public final class ComposerText {
     public private(set) var suggestion: Suggestion?
     /// Asks for what comes next, given the text before and after the cursor. Nil while completion is off or learning.
     @ObservationIgnored public var suggest: (@MainActor (_ before: String, _ after: String) async -> String?)?
-    /// The key that accepts, shown after the gray text. The iPhone has a button above the keyboard instead.
-    @ObservationIgnored private let keyCap: String?
     @ObservationIgnored private var request: Task<Void, Never>?
     @ObservationIgnored private var isReconciling = false
     /// The last edit that came back changed. The editor sends each edit twice, and the second copy still has the
@@ -28,9 +26,8 @@ public final class ComposerText {
     @ObservationIgnored private var lastReconciled: String?
     @ObservationIgnored private var shown: (body: AttributedString, suggestion: Suggestion, text: AttributedString)?
 
-    public init(_ body: AttributedString = AttributedString(), keyCap: String? = nil) {
+    public init(_ body: AttributedString = AttributedString()) {
         self.body = body
-        self.keyCap = keyCap
     }
 
     /// What the editor shows and edits. The same copy every time until something changes, because a selection only
@@ -123,7 +120,7 @@ public final class ComposerText {
             guard let answer = await suggest(before, after), !Task.isCancelled, self.suggestion == nil,
                 String(self.body.characters) == text, self.cursorOffset == cursor
             else { return }
-            self.suggestion = Suggestion(text: answer, offset: cursor, keyCap: self.keyCap)
+            self.suggestion = Suggestion(text: answer, offset: cursor)
             self.place(cursor)
         }
     }
@@ -155,23 +152,15 @@ public final class ComposerText {
 public struct Suggestion: Equatable, Sendable {
     public var text: String
     public var offset: Int
-    public var keyCap: String?
 
-    /// How many characters it takes up in the editor: the text and the key cap after it.
-    var length: Int { text.count + (keyCap.map { $0.count + 1 } ?? 0) }
+    /// How many characters it takes up in the editor.
+    var length: Int { text.count }
 
-    /// The body with the suggestion in it, gray, and the key cap after it.
+    /// The body with the suggestion in it, gray.
     func display(in body: AttributedString) -> AttributedString {
         var shown = body
         var gray = AttributedString(text)
         gray.foregroundColor = Color.textFaint
-        if let keyCap {
-            var cap = AttributedString(" \(keyCap)")
-            cap.foregroundColor = Color.textMuted
-            cap.backgroundColor = Color.selected
-            cap.font = .keyCap
-            gray += cap
-        }
         shown.insert(gray, at: shown.characters.index(shown.startIndex, offsetBy: offset))
         return shown
     }
@@ -222,7 +211,6 @@ public struct Suggestion: Equatable, Sendable {
     private static func plain(_ text: AttributedString) -> AttributedString {
         var text = text
         text.foregroundColor = nil
-        text.backgroundColor = nil
         return text
     }
 }
