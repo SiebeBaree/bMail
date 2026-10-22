@@ -1,9 +1,6 @@
-import { AppleLogo, GitHubLogo } from "@/components/brand-icons";
-import { type Release, repoUrl } from "@/lib/release";
-
 import { HeroWindow } from "./hero-window";
 
-export function Hero({ release }: { release: Release }) {
+export function Hero() {
     return (
         <section id="top" className="relative overflow-hidden pt-36 sm:pt-44">
             {/* Static light: a cool glow behind the window and a dot grid that fades out toward the edges. */}
@@ -38,24 +35,11 @@ export function Hero({ release }: { release: Release }) {
                     bMail brings Gmail and your own domain into one app. Archive, reply and search without waiting, even
                     when you're offline.
                 </p>
-                <div data-reveal style={{ "--d": 340 }} className="mt-9 flex flex-wrap justify-center gap-3">
-                    <a
-                        href={release.dmgUrl}
-                        className="flex h-12 items-center gap-2.5 rounded-full bg-fg px-6 text-[15px] font-medium text-black transition-colors hover:bg-white"
-                    >
-                        <AppleLogo className="size-4 -translate-y-px" />
-                        Download for Mac
-                    </a>
-                    <a
-                        href={repoUrl}
-                        className="flex h-12 items-center gap-2.5 rounded-full border border-line-strong px-6 text-[15px] font-medium text-fg transition-colors hover:bg-hover"
-                    >
-                        <GitHubLogo className="size-4" />
-                        Read the code
-                    </a>
-                </div>
-                <p data-reveal style={{ "--d": 420 }} className="mt-5 font-mono text-[12px] text-faint">
-                    {release.version ? `v${release.version} · ` : ""}macOS 27 · Free and open source
+                <p data-reveal style={{ "--d": 340 }} className="mt-9 text-[17px] font-medium text-fg">
+                    Coming soon
+                </p>
+                <p data-reveal style={{ "--d": 420 }} className="mt-3 font-mono text-[12px] text-faint">
+                    macOS 27 · Free and open source
                 </p>
             </div>
 

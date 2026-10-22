@@ -1,4 +1,3 @@
-import type { Release } from "./release";
 import { site } from "./site";
 
 export type Question = { question: string; answer: string };
@@ -7,8 +6,12 @@ export type Question = { question: string; answer: string };
  * The questions people ask about bMail, answered in full sentences so search engines and AI assistants can quote them.
  * The FAQ section, its FAQPage structured data and llms.txt all read this one list.
  */
-export function faq(release: Release): Question[] {
+export function faq(): Question[] {
     return [
+        {
+            question: "When can I download bMail?",
+            answer: `bMail isn't out yet. It's coming soon for ${site.platform}.`,
+        },
         {
             question: "What is bMail?",
             answer: "bMail is a free, open source email app for macOS. It works with Gmail and with addresses on your own domain, saves every change on your Mac first so nothing waits on a server and has a keyboard shortcut for every action.",
@@ -19,7 +22,7 @@ export function faq(release: Release): Question[] {
         },
         {
             question: "Which Macs does bMail run on?",
-            answer: `bMail runs on ${site.platform} and later. It's a native app written in Swift and SwiftUI${release.size ? `, and the download is ${release.size}` : ""}.`,
+            answer: `bMail runs on ${site.platform} and later. It's a native app written in Swift and SwiftUI.`,
         },
         {
             question: "Does bMail work with Gmail?",
@@ -39,7 +42,7 @@ export function faq(release: Release): Question[] {
         },
         {
             question: "Do I need to host a server?",
-            answer: "Yes, a small api. bMail signs in to it, and it handles your own domains, labels and open tracking. The setup guide on GitHub walks you through deploying it to Vercel with Neon, Resend and Cloudflare R2.",
+            answer: "Yes, a small api. bMail signs in to it, and it handles your own domains, labels and open tracking. You deploy it to Vercel with Neon, Resend and Cloudflare R2.",
         },
         {
             question: "Can bMail tell me when an email is opened?",
