@@ -23,23 +23,21 @@ public final class Completion {
     }
 
     private weak var session: MailSession?
-    private let client: AIClient
-    private let choice: ModelChoice
     private let draft: @MainActor () -> Draft
     /// The system prompt for the current account and recipients. Kept byte for byte between requests so it caches.
     private var system: (key: String, text: String)?
 
-    init(session: MailSession, client: AIClient, choice: ModelChoice, draft: @escaping @MainActor () -> Draft) {
+    init(session: MailSession, client: AIClient, draft: @escaping @MainActor () -> Draft) {
         self.session = session
-        self.client = client
-        self.choice = choice
         self.draft = draft
         Task { await client.warmUp() }
     }
 
     /// The gray text to show, or nil when there's nothing worth suggesting.
     public func suggest(before: String, after: String) async -> String? {
-        guard let session else { return nil }
+        // Settings can change while the composer is open, so they're read on every request.
+        guard let session, session.ai.isCompletionOn, let client = session.ai.client else { return nil }
+        let choice = session.ai.completion
         let draft = draft()
         guard let account = session.accounts.first(where: { $0.id == draft.accountID }) else { return nil }
         let earlier = draft.replyingTo.map { messages(of: $0, in: session) } ?? []

@@ -319,7 +319,7 @@ public final class MailSession {
     /// Tab completion for a composer, or nil while it's off, has no key or is still learning.
     public func completion(for draft: @escaping @MainActor () -> Completion.Draft) -> Completion? {
         guard ai.isCompletionOn, let client = ai.client, sentMailCount >= CompletionPrompt.minimumSentMails else { return nil }
-        return Completion(session: self, client: client, choice: ai.completion, draft: draft)
+        return Completion(session: self, client: client, draft: draft)
     }
 
     /// Labels new mail now, for when auto labelling is turned on or a description changes.

@@ -5,8 +5,8 @@ import Testing
 @testable import Assist
 
 @Suite struct AIClientTests {
-    private func json(_ provider: AIProvider, reasoning: Reasoning) throws -> [String: Any] {
-        let request = AIRequest(model: "m", reasoning: reasoning, system: "rules", prompt: "draft", maxTokens: 100, timeout: 10)
+    private func json(_ provider: AIProvider, model: String = "m", reasoning: Reasoning) throws -> [String: Any] {
+        let request = AIRequest(model: model, reasoning: reasoning, system: "rules", prompt: "draft", maxTokens: 100, timeout: 10)
         let data = try AIClient(provider: provider, key: "k").body(for: request)
         return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
@@ -24,6 +24,15 @@ import Testing
         #expect((xhigh["thinking"] as? [String: String]) == ["type": "adaptive"])
         #expect((xhigh["output_config"] as? [String: String]) == ["effort": "xhigh"])
         #expect(xhigh["max_tokens"] as? Int ?? 0 > 100)
+    }
+
+    @Test func eachClaudeModelTurnsThinkingOffItsOwnWay() throws {
+        let sonnet = try json(.anthropic, model: "claude-sonnet-5-5", reasoning: .off)
+        #expect((sonnet["thinking"] as? [String: String]) == ["type": "between_tools"])
+        #expect(sonnet["output_config"] == nil)
+        let opus = try json(.anthropic, model: "claude-opus-5-5", reasoning: .off)
+        #expect((opus["thinking"] as? [String: String]) == ["type": "adaptive"])
+        #expect((opus["output_config"] as? [String: String]) == ["effort": "low"])
     }
 
     @Test func openAIUsesReasoningEffortAndTheGatewaysAReasoningObject() throws {

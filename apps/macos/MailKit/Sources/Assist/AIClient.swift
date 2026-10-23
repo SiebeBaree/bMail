@@ -99,19 +99,26 @@ public struct AIClient: Sendable {
     func body(for request: AIRequest) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
-        let reasoning = request.reasoning
-        let maxTokens = request.maxTokens + (reasoning == .off ? 0 : 32_000)
+        var reasoning = request.reasoning
         if provider == .anthropic {
+            // Each Claude model turns thinking off its own way: Sonnet 5.5 takes `between_tools` where the others take
+            // `disabled`, and Opus 5.5 and Fable can't, so they think as little as they can. Off only works at effort
+            // high or below, which every model's default is.
+            var thinking = "disabled"
+            if request.model.contains("sonnet-5-5") { thinking = "between_tools" }
+            if request.model.contains("opus-5-5") || request.model.contains("fable") || request.model.contains("mythos") {
+                if reasoning == .off { reasoning = .low }
+            }
             return try encoder.encode(MessagesBody(
                 model: request.model,
-                max_tokens: maxTokens,
+                max_tokens: request.maxTokens + (reasoning == .off ? 0 : 32_000),
                 system: [.init(text: request.system)],
                 messages: [.init(role: "user", content: request.prompt)],
-                // Haiku 5.5 only turns thinking off at effort high or below, which the default medium is.
-                thinking: .init(type: reasoning == .off ? "disabled" : "adaptive"),
+                thinking: .init(type: reasoning == .off ? thinking : "adaptive"),
                 output_config: reasoning == .off || reasoning == .auto ? nil : .init(effort: reasoning.rawValue)
             ))
         }
+        let maxTokens = request.maxTokens + (reasoning == .off ? 0 : 32_000)
         var body = ChatBody(
             model: request.model,
             messages: [.init(role: "system", content: request.system), .init(role: "user", content: request.prompt)]
