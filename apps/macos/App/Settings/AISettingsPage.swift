@@ -256,12 +256,15 @@ private struct ModelList: View {
         .frame(width: 300)
     }
 
-    /// The picked model stays in the list even when the provider doesn't list it, so it can always be seen.
+    /// The picked model stays in the list even when the provider doesn't list it, so it can always be seen. A typed id
+    /// nobody lists can be used as is.
     private var matches: [AIModel] {
         let typed = search.trimmingCharacters(in: .whitespaces)
         let listed = models.contains { $0.id == choice.model } ? models : [AIModel(id: choice.model, name: nil)] + models
         guard !typed.isEmpty else { return listed }
-        return listed.filter { $0.matches(typed) }
+        let found = listed.filter { $0.matches(typed) }
+        if listed.contains(where: { $0.id == typed }) { return found }
+        return [AIModel(id: typed, name: "Use \u{201C}\(typed)\u{201D}")] + found
     }
 }
 

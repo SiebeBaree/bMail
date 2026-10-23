@@ -34,10 +34,12 @@ final class Labeller {
 
     private func label(since: Date, with client: AIClient, choice: ModelChoice, in session: MailSession) async throws {
         let store = session.store
+        let candidates = try Self.candidates(since: since, in: store)
+        guard !candidates.isEmpty else { return }
         let guides = try Self.guides(in: store)
         guard !guides.isEmpty else { return }
         let system = LabelPrompt.system(guides)
-        for id in try Self.candidates(since: since, in: store) {
+        for id in candidates {
             guard session.ai.isLabellingOn, let message = try Self.newestInbound(in: id, store: store) else { continue }
             let answer = try await client.complete(AIRequest(
                 model: choice.model, reasoning: choice.reasoning, system: system, prompt: LabelPrompt.prompt(for: message),
