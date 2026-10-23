@@ -40,10 +40,14 @@ export function labelsRepo(db: Database) {
             if (!row) throw new Error("insert returned no row");
             return row;
         },
-        async rename(userId: string, id: string, name: string): Promise<LabelRow | null> {
+        async update(
+            userId: string,
+            id: string,
+            values: Pick<Partial<LabelRow>, "name" | "description">,
+        ): Promise<LabelRow | null> {
             const [row] = await db
                 .update(labels)
-                .set({ name })
+                .set(values)
                 .where(and(live(userId), eq(labels.id, id)))
                 .returning();
             return row ?? null;

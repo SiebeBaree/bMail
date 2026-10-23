@@ -1,3 +1,4 @@
+import Assist
 import DesignSystem
 import Foundation
 import MailCore
@@ -16,6 +17,10 @@ public final class MailSession {
     public let store: MailStore
     public let syncStatus = SyncStatus()
     public let toasts = ToastCenter()
+    /// Your AI provider, key and features on this device.
+    public let ai = AISettings()
+    /// The last thing that went wrong talking to the AI provider, for Settings. Cleared by the next request that works.
+    public internal(set) var aiProblem: String?
     /// Gmail access, from the build's OAuth client. Without one Gmail isn't offered.
     public let google: OAuthClient?
     /// The api for your domains. Nil until you first sign in, which is where you say which server is yours.
@@ -30,6 +35,7 @@ public final class MailSession {
     /// Runs after every undo, from a key or a toast, with what it took back.
     @ObservationIgnored public var didUndo: @MainActor ([Mutation]) -> Void = { _ in }
     @ObservationIgnored private let engine: MailSyncEngine
+    @ObservationIgnored private var labeller: Labeller!
     /// Each entry is one action, which can have changed many conversations at once. Its toast undoes that action and
     /// no other, even after newer ones.
     @ObservationIgnored private var undoStack: [(id: UUID, mutations: [Mutation])] = []
@@ -61,6 +67,7 @@ public final class MailSession {
         server = serverURL.map(ServerConnection.init(baseURL:))
         engine = MailSyncEngine(store: store, status: syncStatus)
         pages = MailPages(store: store, apiHost: { [weak self] in self?.server?.baseURL.host() }, open: { [weak self] in self?.openLink($0) })
+        labeller = Labeller(session: self)
         #if DEBUG
             // Scripted runs against a local api: `--args -sessionToken <token>` signs in without typing.
             if let token = defaults.string(forKey: "sessionToken") {
@@ -98,7 +105,11 @@ public final class MailSession {
         phase = .ready
         pages.warmUp()
         configureProviders()
-        Task { await engine.start() }
+        let afterPass: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.labeller.run() } }
+        Task { [engine] in
+            await engine.setAfterPass(afterPass)
+            await engine.start()
+        }
     }
 
     /// One provider for your domains plus one per Gmail account. Called again whenever accounts change.
@@ -153,6 +164,8 @@ public final class MailSession {
             Keychain.delete("oauth.\(account.id.uuidString)")
         }
         try? store.eraseAll()
+        ai.forget()
+        aiProblem = nil
         undoStack = []
         pages.removeAll()
         phase = .signedOut
@@ -288,6 +301,30 @@ public final class MailSession {
                 toasts.show(Toast("Couldn't create \(label.name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
             }
         }
+    }
+
+    /// Saves what belongs under a label. Auto labelling only applies labels that have this.
+    public func describeLabel(_ id: MailLabel.ID, as description: String) async throws {
+        try store.merge(try await admin.describeLabel(id, as: description), source: "labels")
+    }
+
+    // MARK: - AI
+
+    /// Emails you've sent, which tab completion learns your voice from. Below `CompletionPrompt.minimumSentMails` it
+    /// stays in learning mode and suggests nothing.
+    public var sentMailCount: Int {
+        (try? store.database.read { db in try Message.where { $0.direction.eq(Direction.outbound) }.fetchCount(db) }) ?? 0
+    }
+
+    /// Tab completion for a composer, or nil while it's off, has no key or is still learning.
+    public func completion(for draft: @escaping @MainActor () -> Completion.Draft) -> Completion? {
+        guard ai.isCompletionOn, let client = ai.client, sentMailCount >= CompletionPrompt.minimumSentMails else { return nil }
+        return Completion(session: self, client: client, draft: draft)
+    }
+
+    /// Labels new mail now, for when auto labelling is turned on or a description changes.
+    public func labelNewMail() {
+        labeller.run()
     }
 
     // MARK: - Unsubscribe

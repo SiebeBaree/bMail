@@ -12,6 +12,7 @@ struct ComposerView: View {
     enum Field { case subject, body }
 
     var body: some View {
+        @Bindable var text = model.text
         VStack(spacing: 0) {
             if model.replacesReader {
                 HStack(spacing: 8) {
@@ -45,7 +46,7 @@ struct ComposerView: View {
                 .frame(height: 44)
                 .overlay(alignment: .bottom) { Hairline() }
             }
-            TextEditor(text: $model.body, selection: $model.selection)
+            TextEditor(text: $text.editorText, selection: $text.selection)
                 .font(.reading)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(!model.replacesReader)
@@ -82,6 +83,7 @@ struct ComposerView: View {
         }
         .onAppear { if !model.to.isEmpty, model.mode != .forward { focus = .body } }
         .onChange(of: model.to) { _, _ in model.error = nil }
+        .onChange(of: focus) { _, focus in if focus != .body { model.text.dismissSuggestion() } }
     }
 
     private var fromRow: some View {

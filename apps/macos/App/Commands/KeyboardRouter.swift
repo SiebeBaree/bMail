@@ -8,10 +8,13 @@ final class KeyboardRouter {
     private var monitor: Any?
     private var pendingG: Date?
     private let perform: @MainActor (Command) -> Bool
+    private let acceptSuggestion: @MainActor () -> Bool
 
-    /// `perform` returns whether the command applied; an unhandled key falls through to the focused view.
-    init(perform: @escaping @MainActor (Command) -> Bool) {
+    /// `perform` returns whether the command applied; an unhandled key falls through to the focused view. So does Tab
+    /// when there's no suggestion to accept.
+    init(perform: @escaping @MainActor (Command) -> Bool, acceptSuggestion: @escaping @MainActor () -> Bool) {
         self.perform = perform
+        self.acceptSuggestion = acceptSuggestion
     }
 
     func start() {
@@ -29,6 +32,8 @@ final class KeyboardRouter {
     private func handle(_ event: NSEvent) -> Bool {
         let modifiers = event.modifierFlags.intersection([.command, .control, .option])
         if event.keyCode == 53 { return perform(.back) }
+        // Caught here because the text view would insert a tab before SwiftUI saw the key.
+        if event.keyCode == 48, modifiers.isEmpty, !event.modifierFlags.contains(.shift), isTyping, acceptSuggestion() { return true }
         // ⌘A and ⌘⌫ act on conversations, except in a text field, where they select and delete text.
         if modifiers == .command, !isTyping, event.charactersIgnoringModifiers == "a" { return perform(.checkAll) }
         if modifiers == .command, !isTyping, event.keyCode == 51 { return perform(.trash) }

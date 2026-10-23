@@ -113,6 +113,7 @@ export function toLabel(row: LabelRow): Label {
     return {
         id: row.id,
         name: row.name,
+        description: row.description,
         createdAt: iso(row.createdAt),
         deletedAt: isoOrNull(row.deletedAt),
     };

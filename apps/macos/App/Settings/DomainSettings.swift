@@ -124,7 +124,7 @@ private struct DomainRow: View {
                     RecordTable(records: domain.records)
                         .padding(.bottom, 16)
 
-                    setting("Catch-all", note: "Gets mail sent to addresses that don't exist.") {
+                    SettingRow("Catch-all", note: "Gets mail sent to addresses that don't exist.") {
                         Button { isCatchAllOpen.toggle() } label: {
                             HStack(spacing: 8) {
                                 Text(mailboxes.first { $0.id == domain.catchAllMailboxID }?.address ?? "Off")
@@ -137,13 +137,13 @@ private struct DomainRow: View {
                             ForEach(mailboxes) { mailbox in catchAllOption(mailbox.address, id: mailbox.id) }
                         }
                     }
-                    setting("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.session.server?.baseURL.host() ?? "the api").") {
+                    SettingRow("Tracking host", note: domain.trackingHostVerified ? "Opens and clicks go through your own domain." : "Until this is live, tracked mail uses \(model.session.server?.baseURL.host() ?? "the api").") {
                         HStack(spacing: 6) {
                             StatusDot(domain.trackingHostVerified ? .success : .warning)
                             Text(domain.trackingHost).font(.meta)
                         }
                     }
-                    setting("Remove domain", note: "Deletes every address on it and all their mail.") {
+                    SettingRow("Remove domain", note: "Deletes every address on it and all their mail.") {
                         ConfirmButton(title: "Remove", confirmation: "Remove \(domain.name) and its mail") { remove() }
                     }
                 }
@@ -159,19 +159,6 @@ private struct DomainRow: View {
                 if !Task.isCancelled { verify() }
             }
         }
-    }
-
-    private func setting(_ title: String, note: String, @ViewBuilder control: () -> some View) -> some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                Text(note).font(.geist(12)).foregroundStyle(Color.textMuted)
-            }
-            Spacer()
-            control()
-        }
-        .padding(.vertical, 12)
-        .overlay(alignment: .top) { Hairline() }
     }
 
     private func catchAllOption(_ title: String, id: Account.ID?) -> some View {

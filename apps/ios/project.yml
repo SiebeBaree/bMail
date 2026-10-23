@@ -39,6 +39,8 @@ targets:
       - package: MailKit
         product: Providers
       - package: MailKit
+        product: Assist
+      - package: MailKit
         product: MailUI
     settings:
       base:

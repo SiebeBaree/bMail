@@ -23,6 +23,8 @@ public actor MailSyncEngine {
     private var isVisible = true
     /// Callers of `refresh`, resumed when the next pass to start has finished.
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Runs after every pass, for work that looks at what just arrived. It must return quickly: the next pass waits.
+    private var afterPass: @Sendable () -> Void = {}
 
     public init(store: MailStore, status: SyncStatus) {
         self.store = store
@@ -32,6 +34,10 @@ public actor MailSyncEngine {
     public func setProviders(_ providers: [any MailProvider]) {
         self.providers = providers
         wake()
+    }
+
+    public func setAfterPass(_ body: @escaping @Sendable () -> Void) {
+        afterPass = body
     }
 
     public func start() {
@@ -106,6 +112,7 @@ public actor MailSyncEngine {
         await pushMutations()
         await sendDueMessages()
         await pull()
+        afterPass()
         scheduleOutboxTimer()
         await status.passFinished()
         for waiter in finished { waiter.resume() }

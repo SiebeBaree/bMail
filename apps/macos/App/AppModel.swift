@@ -77,7 +77,10 @@ final class AppModel {
         agents = AgentServer(session: session)
         agents.review = { [weak self] draft in self?.review(draft) }
         notifications.send = { [weak self] id in self?.sendDraft(id) }
-        keyboard = KeyboardRouter { [weak self] command in self?.perform(command) ?? false }
+        keyboard = KeyboardRouter(
+            perform: { [weak self] command in self?.perform(command) ?? false },
+            acceptSuggestion: { [weak self] in self?.composer?.text.accept() ?? false }
+        )
         keyboard?.start()
         session.openLink = { [weak self] url in self?.open(url) }
         // Undoing a move out of this tab shows the conversation again.
@@ -159,6 +162,8 @@ final class AppModel {
     private func back() -> Bool {
         if isPaletteOpen { isPaletteOpen = false } else if isShortcutsOpen { isShortcutsOpen = false } else if isLabelPickerOpen {
             isLabelPickerOpen = false
+        } else if composer?.text.dismissSuggestion() == true {
+            // Esc takes the suggestion away first, and only then the composer.
         } else if composer != nil {
             composer?.close()
         } else if !checked.isEmpty {

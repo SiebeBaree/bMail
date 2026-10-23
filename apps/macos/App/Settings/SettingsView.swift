@@ -6,19 +6,35 @@ import Providers
 import SQLiteData
 import SwiftUI
 
-/// One page: the addresses you read and send from, then the domains behind your own addresses. Every way to add an
-/// address starts from the same button.
+/// Two pages. General: the addresses you read and send from, your labels, the domains behind your own addresses and
+/// agents. Every way to add an address starts from the same button. AI: your key and the features that use it.
 struct SettingsView: View {
+    enum Page: String, CaseIterable { case general = "General", ai = "AI" }
+
     @FocusState private var isDomainFieldFocused: Bool
+    @State private var page = Page.general
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 48) {
-                Text("Settings").font(.pageTitle).tracking(-0.3)
-                AccountsSection(isDomainFieldFocused: $isDomainFieldFocused)
-                LabelsSection()
-                DomainsSection(isDomainFieldFocused: $isDomainFieldFocused)
-                AgentsSection()
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("Settings").font(.pageTitle).tracking(-0.3)
+                    HStack(spacing: 22) {
+                        ForEach(Page.allCases, id: \.self) { page in
+                            PageTab(title: page.rawValue, isSelected: self.page == page) { self.page = page }
+                        }
+                    }
+                    .overlay(alignment: .bottom) { Hairline() }
+                }
+                switch page {
+                case .general:
+                    AccountsSection(isDomainFieldFocused: $isDomainFieldFocused)
+                    LabelsSection()
+                    DomainsSection(isDomainFieldFocused: $isDomainFieldFocused)
+                    AgentsSection()
+                case .ai:
+                    AISettingsPage()
+                }
             }
             .padding(.horizontal, 40)
             .padding(.top, 56)
@@ -38,6 +54,28 @@ struct SettingsView: View {
     }
 }
 
+/// A text tab with a line under the current one, like the main window's.
+private struct PageTab: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .foregroundStyle(isSelected || isHovered ? Color.textPrimary : Color.textMuted)
+                .padding(.bottom, 10)
+                .overlay(alignment: .bottom) {
+                    if isSelected { Rectangle().fill(Color.textPrimary).frame(height: 2) }
+                }
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
 /// A section title with its action on the right, over a hairline.
 struct SettingsHeader<Action: View>: View {
     let title: String
@@ -53,6 +91,39 @@ struct SettingsHeader<Action: View>: View {
             .padding(.bottom, 10)
             Hairline()
         }
+    }
+}
+
+/// One setting: what it is on the left, with a short note under it, and its control on the right.
+struct SettingRow<Control: View>: View {
+    let title: String
+    let note: Text?
+    @ViewBuilder let control: () -> Control
+
+    init(_ title: String, note: String? = nil, @ViewBuilder control: @escaping () -> Control = { EmptyView() }) {
+        self.title = title
+        self.note = note.map { Text($0) }
+        self.control = control
+    }
+
+    init(_ title: String, note: Text, @ViewBuilder control: @escaping () -> Control = { EmptyView() }) {
+        self.title = title
+        self.note = note
+        self.control = control
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let note { note.font(.geist(12)).foregroundStyle(Color.textMuted) }
+            }
+            Spacer()
+            control()
+        }
+        .padding(.vertical, 12)
+        .frame(minHeight: 52)
+        .overlay(alignment: .top) { Hairline() }
     }
 }
 

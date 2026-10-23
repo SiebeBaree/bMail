@@ -106,6 +106,16 @@ extension ServerAdmin {
         }
     }
 
+    /// Empty clears it, and the label is no longer applied by AI.
+    public func describeLabel(_ id: MailLabel.ID, as description: String) async throws -> ChangeSet {
+        switch try await connection.client.updateLabel(path: .init(id: id.wire), body: .json(.init(description: description))) {
+        case let .ok(ok): return ChangeSet(label: MailLabel(try ok.body.json))
+        case let .badRequest(error): throw ProviderError(.rejected, try error.body.json.issues?.first?.message ?? error.body.json.message)
+        case let .notFound(error): throw ProviderError(.rejected, try error.body.json.message)
+        case .conflict, .undocumented: throw ProviderError(.unavailable, "Couldn't save the description.")
+        }
+    }
+
     /// Takes the label off every conversation too.
     public func deleteLabel(_ id: MailLabel.ID) async throws -> ChangeSet {
         switch try await connection.client.deleteLabel(path: .init(id: id.wire)) {

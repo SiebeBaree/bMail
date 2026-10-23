@@ -210,5 +210,19 @@ private var migrator: DatabaseMigrator {
                 """
         )
     }
+    migrator.registerMigration("Label descriptions and label decisions") { db in
+        try db.execute(
+            sql: """
+                ALTER TABLE "labels" ADD COLUMN "description" TEXT;
+
+                CREATE TABLE "labelDecisions" (
+                    "conversationID" TEXT PRIMARY KEY NOT NULL,
+                    "labelIDs" TEXT NOT NULL,
+                    "decidedAt" TEXT NOT NULL
+                ) STRICT;
+                CREATE INDEX "labelDecisions_by_date" ON "labelDecisions"("decidedAt" DESC);
+                """
+        )
+    }
     return migrator
 }
