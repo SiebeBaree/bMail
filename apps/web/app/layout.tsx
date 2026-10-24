@@ -43,8 +43,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#000000", colorScheme: "dark" };
 
-// Runs before first paint. The intro plays unless motion is reduced or the link points somewhere down the page.
-const introScript = `if(!location.hash&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.dataset.intro="play"`;
+// Runs before first paint. The intro plays on the home page unless motion is reduced or the link points down the page.
+const introScript = `if(location.pathname==="/"&&!location.hash&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.dataset.intro="play"`;
 
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (

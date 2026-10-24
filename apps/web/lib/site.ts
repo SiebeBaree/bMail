@@ -7,4 +7,5 @@ export const site = {
         "bMail is a free, open source Mac email app for Gmail and your own domain. Every action is instant and works offline, and everything has a keyboard shortcut.",
     platform: "macOS 27",
     author: { name: "Siebe Baree", url: "https://github.com/SiebeBaree" },
+    contact: "siebe@baree.be",
 } as const;

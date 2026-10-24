@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { LogoMark } from "@/components/logo";
 import { Reveal } from "@/components/reveal";
 
@@ -33,11 +35,19 @@ export function Closing() {
 
 export function Footer() {
     return (
-        <footer className="mx-auto flex max-w-[1200px] border-t border-line px-6 py-10 text-[14px] text-muted sm:px-12">
+        <footer className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 border-t border-line px-6 py-10 text-[14px] text-muted sm:px-12">
             <span className="flex items-center gap-2.5">
                 <LogoMark size={20} />
                 <span className="font-medium text-fg">bMail</span>
                 <span className="text-faint">© 2026 Siebe Baree</span>
+            </span>
+            <span className="flex gap-5">
+                <Link href="/privacy" className="transition-colors hover:text-fg">
+                    Privacy
+                </Link>
+                <Link href="/terms" className="transition-colors hover:text-fg">
+                    Terms
+                </Link>
             </span>
         </footer>
     );
