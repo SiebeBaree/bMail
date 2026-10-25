@@ -9,8 +9,8 @@ beforeAll(async () => {
 });
 afterAll(() => harness.close());
 
-it("GET /health reports ok", async () => {
+it("GET /health reports ok and whether the server has an owner", async () => {
     const response = await harness.app.inject({ method: "GET", url: "/health" });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: "ok" });
+    expect(response.json()).toEqual({ status: "ok", claimed: false });
 });

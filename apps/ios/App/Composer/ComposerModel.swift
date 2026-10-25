@@ -1,3 +1,4 @@
+import DesignSystem
 import Foundation
 import MailCore
 import MailUI
@@ -41,6 +42,16 @@ final class ComposerModel: Identifiable {
     var quoted: Quote?
     var showsQuote = false
     var trackingEnabled = false
+
+    /// Tracking runs on your server, so without one it stays off and says why.
+    func toggleTracking() {
+        guard let app, app.session.canTrack else {
+            app?.session.toasts.show(Toast("Tracking needs a server", detail: "Set one up in Settings under Add Account.", symbol: "waveform.path.ecg"))
+            return
+        }
+        trackingEnabled.toggle()
+        Haptics.tap()
+    }
     var attachments: [OutgoingAttachment] = []
     var error: String?
 

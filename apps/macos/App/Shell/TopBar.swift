@@ -199,8 +199,6 @@ private struct AccountMenu: View {
         .dropdown(isPresented: $isOpen, alignment: .trailing) {
             item("Settings", key: "⌘,") { model.openSettings() }
             item("Keyboard shortcuts", key: "?") { model.perform(.shortcuts) }
-            Hairline().padding(.vertical, 4)
-            item("Sign out", key: nil) { Task { await model.signOut() } }
         }
     }
 

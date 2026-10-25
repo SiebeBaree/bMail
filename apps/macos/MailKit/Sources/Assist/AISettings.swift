@@ -13,8 +13,8 @@ public struct ModelChoice: Codable, Equatable, Sendable {
     }
 }
 
-/// Your AI setup on this device: the provider, its key and what each feature uses. The key lives in the keychain, one per
-/// provider so switching back keeps it; the rest in UserDefaults. Model choices are per provider too, since every
+/// Your AI setup on this device: the provider, its key, what each feature uses and what your labels mean. The key lives
+/// in the keychain, one per provider so switching back keeps it; the rest in UserDefaults. Model choices are per provider too, since every
 /// provider names models its own way.
 @MainActor
 @Observable
@@ -63,6 +63,12 @@ public final class AISettings {
         didSet { save(labelling, .labelling) }
     }
 
+    /// What belongs under each label, in your words, by label name: a Gmail label and your server's with the same name
+    /// are one label to you, and Gmail labels have nowhere to keep a description. Auto labelling only applies these.
+    public var labelDescriptions: [String: String] {
+        didSet { defaults.set(labelDescriptions, forKey: "ai.labelDescriptions") }
+    }
+
     @ObservationIgnored private let defaults = UserDefaults.standard
 
     public init() {
@@ -74,20 +80,13 @@ public final class AISettings {
         labellingSince = UserDefaults.standard.object(forKey: "ai.labelling.since") as? Date
         completion = Self.choice(.completion, for: provider)
         labelling = Self.choice(.labelling, for: provider)
+        labelDescriptions = UserDefaults.standard.dictionary(forKey: "ai.labelDescriptions") as? [String: String] ?? [:]
     }
 
     /// A client for the provider, once there's a key.
     public var client: AIClient? {
         let key = key.trimmingCharacters(in: .whitespacesAndNewlines)
         return key.isEmpty ? nil : AIClient(provider: provider, key: key)
-    }
-
-    /// Forgets every key, for signing out: the next person to sign in on this device shouldn't spend yours.
-    public func forget() {
-        for provider in AIProvider.allCases { Keychain.delete(Self.keyName(provider)) }
-        key = ""
-        isCompletionOn = false
-        isLabellingOn = false
     }
 
     // MARK: - Storage

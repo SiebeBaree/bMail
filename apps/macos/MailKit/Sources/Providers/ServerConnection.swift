@@ -5,16 +5,54 @@ import MailCore
 import OpenAPIRuntime
 import OpenAPIURLSession
 
-/// The api for your own domains: where it lives, the session token and a configured generated client. Sign-in calls go
-/// to Better Auth, which isn't part of the generated client, so they're written out here.
+/// Your server's address and the token that proves this app owns it. Kept as one synced Keychain item, so connecting
+/// on the Mac connects your iPhone too.
+public struct ServerLink: Codable, Equatable, Sendable {
+    public var url: URL
+    public var token: String
+
+    static let key = "server"
+
+    public init(url: URL, token: String) {
+        self.url = url
+        self.token = token
+    }
+
+    /// The saved link. Builds from before items synced kept the address in defaults and a sign-in session in the
+    /// Keychain; the server turned those sessions into owner tokens, so that pair moves over as it is.
+    public static func load() -> ServerLink? {
+        if let stored = Keychain.read(key).flatMap({ try? JSONDecoder().decode(ServerLink.self, from: Data($0.utf8)) }) {
+            return stored
+        }
+        let defaults = UserDefaults.standard
+        guard let url = defaults.string(forKey: "serverURL").flatMap(URL.init(string:)), let token = Keychain.read("server.session") else {
+            return nil
+        }
+        let link = ServerLink(url: url, token: token)
+        link.save()
+        Keychain.delete("server.session")
+        defaults.removeObject(forKey: "serverURL")
+        defaults.removeObject(forKey: "cacheServerURL")
+        return link
+    }
+
+    public func save() {
+        Keychain.write(String(decoding: (try? JSONEncoder().encode(self)) ?? Data(), as: UTF8.self), for: Self.key, synced: true)
+    }
+
+    public static func forget() {
+        Keychain.delete(key)
+    }
+}
+
+/// The api for your own domains and tracking: where it lives, the owner token and a configured generated client.
 public final class ServerConnection: Sendable {
-    public static let sessionKey = "server.session"
+    /// Whether anyone owns the server yet. The first app to connect to a fresh one becomes its owner.
+    public enum Ownership: Sendable { case fresh, owned }
 
     public let baseURL: URL
     let client: Client
-    /// Never stores or sends cookies. Better Auth answers sign-in with a session cookie as well as the bearer token, and a
-    /// request that carries a cookie without an Origin header fails its CSRF check, so a remembered cookie would break
-    /// every sign-in after the first.
+    /// Never stores or sends cookies: the api only ever reads the bearer token.
     static let session: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = nil
@@ -23,7 +61,8 @@ public final class ServerConnection: Sendable {
         return URLSession(configuration: configuration)
     }()
 
-    /// The server address someone typed, as a base url. A bare host means https. Nil when it isn't an address.
+    /// The server address someone typed or a link carried, as a base url. A bare host means https. Nil when it isn't an
+    /// address.
     public static func baseURL(from text: String) -> URL? {
         var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.contains("://") { text = "https://" + text }
@@ -32,83 +71,58 @@ public final class ServerConnection: Sendable {
         return url
     }
 
-    public convenience init(baseURL: URL) {
-        self.init(baseURL: baseURL, transport: URLSessionTransport(configuration: .init(session: Self.session)))
+    public convenience init(_ link: ServerLink) {
+        self.init(baseURL: link.url, token: link.token)
+    }
+
+    /// Without a token only `ownership` and `claim` work.
+    public convenience init(baseURL: URL, token: String? = nil) {
+        self.init(baseURL: baseURL, token: token, transport: URLSessionTransport(configuration: .init(session: Self.session)))
     }
 
     /// Tests pass a transport that answers like the api does, to check the generated client against real responses.
-    init(baseURL: URL, transport: any ClientTransport) {
+    init(baseURL: URL, token: String?, transport: any ClientTransport) {
         self.baseURL = baseURL
         self.client = Client(
             serverURL: baseURL,
             configuration: Configuration(dateTranscoder: .iso8601WithFractionalSeconds),
             transport: transport,
-            middlewares: [BearerMiddleware()]
+            middlewares: token.map { [BearerMiddleware(token: $0)] } ?? []
         )
     }
 
-    public var isSignedIn: Bool { Keychain.read(Self.sessionKey) != nil }
+    public var host: String { baseURL.host() ?? baseURL.absoluteString }
 
-    /// Throws unless a bMail api answers at `baseURL`, so a mistyped address fails before anyone tries to sign in.
-    public func checkServer() async throws {
-        guard case .ok? = try? await client.health() else {
-            throw ProviderError(.unavailable, "No bMail server answers at \(baseURL.host() ?? baseURL.absoluteString).")
+    /// Whether a bMail api answers at `baseURL` and whether it has an owner, so a mistyped address fails before anything
+    /// else happens.
+    public func ownership() async throws -> Ownership {
+        guard case let .ok(ok)? = try? await client.health(), let health = try? ok.body.json else {
+            throw ProviderError(.unavailable, "No bMail server answers at \(host).")
         }
+        return health.claimed ? .owned : .fresh
     }
 
-    public func signOut() async {
-        _ = try? await authRequest("sign-out", body: [String: String]())
-        Keychain.delete(Self.sessionKey)
-    }
-
-    public func signIn(email: String, password: String) async throws {
-        try await authenticate("sign-in/email", body: ["email": email, "password": password])
-    }
-
-    /// Hands the ID token Sign in with Apple gave the app to Better Auth, which verifies it and opens a session.
-    public func signInWithApple(idToken: String, nonce: String) async throws {
-        struct Body: Encodable {
-            struct IDToken: Encodable {
-                var token: String
-                var nonce: String
-            }
-            var provider: String
-            var idToken: IDToken
-        }
-        try await authenticate("sign-in/social", body: Body(provider: "apple", idToken: .init(token: idToken, nonce: nonce)))
-    }
-
-    private func authenticate(_ path: String, body: some Encodable) async throws {
-        let (data, response) = try await authRequest(path, body: body)
-        guard (200..<300).contains(response.statusCode), let token = response.value(forHTTPHeaderField: "set-auth-token") else {
-            let message = (try? JSONDecoder().decode(AuthError.self, from: data))?.message
-            throw ProviderError(.rejected, message ?? "Couldn't sign in. Check your details and try again.")
-        }
-        Keychain.write(token, for: Self.sessionKey)
-    }
-
-    private func authRequest(_ path: String, body: some Encodable) async throws -> (Data, HTTPURLResponse) {
-        var request = URLRequest(url: baseURL.appending(path: "api/auth/\(path)"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        if let token = Keychain.read(Self.sessionKey) { request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization") }
-        request.httpBody = try JSONEncoder().encode(body)
+    /// Makes this app the server's owner. A server that has one already takes its `CLAIM_CODE` instead, which replaces
+    /// every other owner token.
+    public func claim(code: String? = nil) async throws -> ServerLink {
+        let response: Operations.Claim.Output
         do {
-            let (data, response) = try await Self.session.data(for: request)
-            guard let response = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-            return (data, response)
-        } catch let error as URLError {
-            throw ProviderError(.unavailable, "Can't reach \(baseURL.host() ?? "the server"). \(error.localizedDescription)")
+            response = try await client.claim(body: .json(.init(code: code)))
+        } catch {
+            throw ProviderError(.unavailable, "Can't reach \(host).")
         }
-    }
-
-    private struct AuthError: Decodable {
-        var message: String?
+        switch response {
+        case let .ok(ok): return ServerLink(url: baseURL, token: try ok.body.json.token)
+        case let .conflict(error): throw ProviderError(.rejected, try error.body.json.message)
+        default: throw ProviderError(.unavailable, "\(host) didn't answer the way a bMail server does.")
+        }
     }
 }
 
-/// Adds the session to every generated call.
+/// Adds the owner token to every generated call.
 private struct BearerMiddleware: ClientMiddleware {
+    let token: String
+
     func intercept(
         _ request: HTTPRequest,
         body: HTTPBody?,
@@ -117,9 +131,7 @@ private struct BearerMiddleware: ClientMiddleware {
         next: @Sendable (HTTPRequest, HTTPBody?, URL) async throws -> (HTTPResponse, HTTPBody?)
     ) async throws -> (HTTPResponse, HTTPBody?) {
         var request = request
-        if let token = Keychain.read(ServerConnection.sessionKey) {
-            request.headerFields[.authorization] = "Bearer \(token)"
-        }
+        request.headerFields[.authorization] = "Bearer \(token)"
         return try await next(request, body, baseURL)
     }
 }

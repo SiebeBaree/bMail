@@ -77,7 +77,7 @@ struct CommandPalette: View {
             .filter { !$0.needsConversation || model.selection != nil }
             .map(PaletteItem.command)
         let accounts = model.session.accounts.map(PaletteItem.account)
-        let labels = ((try? model.session.store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }) ?? []).map(PaletteItem.label)
+        let labels = ((try? model.session.store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }) ?? []).names.map(PaletteItem.label)
         let conversations: [PaletteItem] = query.count < 2 ? [] : conversationMatches.map(PaletteItem.conversation)
 
         let scored = (commands + accounts + labels).compactMap { item -> (PaletteItem, Double)? in
@@ -107,7 +107,7 @@ struct CommandPalette: View {
         switch item {
         case let .command(command): model.perform(command)
         case let .account(account): model.accountFilter = account.id
-        case let .label(label): model.labelFilter = label.id
+        case let .label(name): model.labelFilter = name
         case let .conversation(conversation):
             model.searchText = query
             model.selection = conversation.id
@@ -118,14 +118,14 @@ struct CommandPalette: View {
 enum PaletteItem: Identifiable {
     case command(Command)
     case account(Account)
-    case label(MailLabel)
+    case label(String)
     case conversation(Conversation)
 
     var id: String {
         switch self {
         case let .command(command): "command.\(command.title)"
         case let .account(account): "account.\(account.id)"
-        case let .label(label): "label.\(label.id)"
+        case let .label(name): "label.\(name)"
         case let .conversation(conversation): "conversation.\(conversation.id)"
         }
     }
@@ -134,7 +134,7 @@ enum PaletteItem: Identifiable {
         switch self {
         case let .command(command): command.title
         case let .account(account): "Switch to \(account.address)"
-        case let .label(label): "Go to \(label.name)"
+        case let .label(name): "Go to \(name)"
         case let .conversation(conversation): conversation.subject
         }
     }

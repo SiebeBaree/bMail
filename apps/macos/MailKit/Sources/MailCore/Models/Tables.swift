@@ -217,19 +217,23 @@ public struct MessageEvent: Hashable, Identifiable, Sendable {
     public var isReader: Bool { source == nil || source == .person || source == .googleProxy }
 }
 
-/// One of your labels. They're bMail's own, kept by the api for every account, so Gmail never sees them.
+/// One of your labels. Gmail mail carries its account's Gmail labels; mail on your domains carries labels your server
+/// keeps. Views show labels by name, so a "Receipts" on both is one label to you.
 /// Not `Label`, which every view file would read as SwiftUI's.
 @Table("labels")
 public struct MailLabel: Hashable, Identifiable, Sendable {
     public let id: UUID
     public var name: String
-    /// What belongs under it, in your words. Auto labelling only applies labels that have one.
-    public var description: String?
+    /// The Gmail account the label belongs to. Nil for your server's.
+    public var accountID: Account.ID?
+    /// Gmail's own id for the label, like `Label_12`.
+    public var remoteID: String?
 
-    public init(id: UUID, name: String, description: String? = nil) {
+    public init(id: UUID, name: String, accountID: Account.ID? = nil, remoteID: String? = nil) {
         self.id = id
         self.name = name
-        self.description = description
+        self.accountID = accountID
+        self.remoteID = remoteID
     }
 }
 
@@ -252,7 +256,7 @@ public struct LabelDecision: Hashable, Identifiable, Sendable {
 }
 
 /// A label on a conversation. Not tied to the conversation row: a Gmail conversation is replaced on every resync, and
-/// its labels arrive from the api on their own schedule.
+/// a server label can arrive before its conversation does.
 @Table
 public struct ConversationLabel: Hashable, Sendable {
     public var conversationID: Conversation.ID

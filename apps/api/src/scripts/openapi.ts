@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { createDb } from "@repo/db";
 
 import { buildApp } from "../app";
-import { createAuth } from "../auth";
+import { createServerSettings } from "../lib/server-settings";
 import { createMemoryStorage } from "../lib/storage";
 import { createFakeResend } from "../test/fake-resend";
 
@@ -14,12 +14,7 @@ const output = new URL("../../../macos/MailKit/Sources/APIClient/openapi.json", 
 const db = createDb("postgres://openapi:openapi@localhost/openapi");
 const app = await buildApp({
     db,
-    auth: createAuth({
-        db,
-        baseURL: "http://localhost",
-        secret: "openapi-openapi-openapi-openapi-openapi",
-        allowedEmails: [],
-    }),
+    settings: createServerSettings(db),
     resend: createFakeResend().gateway,
     storage: createMemoryStorage(),
     trackingSecret: "openapi",

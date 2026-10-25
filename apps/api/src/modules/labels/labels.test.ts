@@ -12,7 +12,7 @@ beforeAll(async () => {
 afterAll(() => harness.close());
 beforeEach(async () => {
     await harness.reset();
-    headers = await harness.signIn();
+    headers = await harness.claim();
 });
 
 const createLabel = (name: string, id: string = crypto.randomUUID()) =>
@@ -49,34 +49,6 @@ describe("labels", () => {
         expect((await sync()).labels).toEqual([
             expect.objectContaining({ id: label.id, name: "Clients", deletedAt: expect.any(String) }),
         ]);
-    });
-
-    it("saves a description on its own and clears it when it's empty", async () => {
-        const label: Label = expectStatus(await createLabel("Receipts"), 201);
-        expect(label.description).toBeNull();
-        const update = (payload: object) =>
-            harness.app.inject({ method: "PATCH", url: `/labels/${label.id}`, headers, payload });
-
-        expect(expectStatus(await update({ description: " Invoices and order confirmations " }), 200)).toMatchObject({
-            name: "Receipts",
-            description: "Invoices and order confirmations",
-        });
-        expect(expectStatus(await update({ name: "Bills" }), 200)).toMatchObject({
-            name: "Bills",
-            description: "Invoices and order confirmations",
-        });
-        expect(expectStatus(await update({ description: "" }), 200)).toMatchObject({ description: null });
-    });
-
-    it("refuses a description over 500 characters", async () => {
-        const label: Label = expectStatus(await createLabel("Receipts"), 201);
-        const response = await harness.app.inject({
-            method: "PATCH",
-            url: `/labels/${label.id}`,
-            headers,
-            payload: { description: "x".repeat(501) },
-        });
-        expect(response.statusCode).toBe(400);
     });
 
     it("returns the same label for a retried create", async () => {

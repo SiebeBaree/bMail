@@ -1,5 +1,6 @@
 import Agents
 import AppKit
+import AuthenticationServices
 import DesignSystem
 import Foundation
 import MailCore
@@ -29,8 +30,8 @@ final class AppModel {
             if tab != oldValue { selection = nil; checked = [] }
         }
     }
-    /// A label's conversations instead of the tab's. Picking a tab leaves it.
-    var labelFilter: MailLabel.ID? {
+    /// A label's conversations instead of the tab's, by name. Picking a tab leaves it.
+    var labelFilter: String? {
         didSet { if labelFilter != oldValue { selection = nil; checked = [] } }
     }
     /// Nil shows every account together.
@@ -61,6 +62,8 @@ final class AppModel {
             }
         }
     }
+    /// The server the connect sheet is asking about, from a `bmail://connect` link or a typed address.
+    var connectingServer: URL?
     var isPaletteOpen = false
     var isShortcutsOpen = false
     var isLabelPickerOpen = false
@@ -99,11 +102,39 @@ final class AppModel {
         }
     }
 
-    func signOut() async {
-        await session.signOut()
-        agents.forget()
-        agentDrafts = []
-        selection = nil
+    // MARK: - Accounts
+
+    /// Google's sign-in in a browser sheet, then the account. Cancelling isn't an error.
+    func connectGmail(using webAuthenticationSession: WebAuthenticationSession) async throws {
+        guard let client = session.google else { return }
+        let attempt = client.start()
+        do {
+            let callback = try await webAuthenticationSession.authenticate(
+                using: attempt.url,
+                callback: .customScheme(attempt.callbackScheme),
+                preferredBrowserSession: .ephemeral,
+                additionalHeaderFields: [:]
+            )
+            try session.connectGmail(tokens: try await client.finish(attempt, callback: callback))
+        } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
+            return
+        }
+    }
+
+    /// Asks before connecting to the server at `url`, unless it's the one already connected.
+    func connect(to url: URL) {
+        if session.server?.baseURL == url {
+            session.toasts.show(Toast("Already connected to \(url.host() ?? url.absoluteString)", symbol: "checkmark"))
+        } else {
+            connectingServer = url
+        }
+    }
+
+    /// Links bMail opens: `bmail://connect?server=…`, which Vercel's deploy flow sends you back with.
+    func handle(_ link: URL) {
+        guard let server = ServerSetup.server(in: link) else { return }
+        NSApp.activate()
+        connect(to: server)
     }
 
     // MARK: - Commands
@@ -219,12 +250,9 @@ final class AppModel {
 
     // MARK: - Labels
 
-    func toggleLabel(_ labelID: MailLabel.ID) {
-        session.toggleLabel(labelID, on: targetIDs)
-    }
-
-    func createLabel(named name: String) {
-        session.createLabel(named: name, on: targetIDs)
+    /// Puts the label on the targets or takes it off, creating it where it doesn't exist yet.
+    func toggleLabel(_ name: String) {
+        session.toggleLabel(named: name, on: targetIDs)
     }
 
     // MARK: - Sending

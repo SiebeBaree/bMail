@@ -4,7 +4,7 @@ A native mail client for Mac and iPhone, for Gmail and your own domains. Gmail s
 
 ## This codebase
 
-Turborepo monorepo: the macOS app (`apps/macos`, Swift), the iPhone app (`apps/ios`, Swift), a Fastify api (`apps/api`), the Next.js marketing site (`apps/web`) and shared TypeScript packages under `packages/`. The api deploys on Vercel but depends on nothing Vercel-specific: Neon for Postgres, Cloudflare R2 (S3 api) for files.
+Turborepo monorepo: the macOS app (`apps/macos`, Swift), the iPhone app (`apps/ios`, Swift), a Fastify api (`apps/api`), the Next.js marketing site (`apps/web`) and shared TypeScript packages under `packages/`. The api deploys on Vercel from a deploy button but runs on any Node host: Neon for Postgres, a private Vercel Blob store or Cloudflare R2 (S3 api) for files.
 
 ## Principles
 
@@ -22,7 +22,7 @@ Turborepo monorepo: the macOS app (`apps/macos`, Swift), the iPhone app (`apps/i
 - **Seq**: every synced row's position in its user's change stream, set by a Postgres trigger. The app syncs with `GET /sync?cursor=<seq>`.
 - **Mutation** (app): every user action, applied to SQLite first and then flushed to the provider by a persistent queue.
 - **Provider** (app): one per account kind (Gmail, your domains). Translates between its wire format and the app's models and nothing more.
-- **Session** (app): `MailSession`, the cache, your server, the sync engine and every action that changes mail. Each app's `AppModel` owns one and adds its own navigation, so sending, undo and signing out behave the same on both.
+- **Session** (app): `MailSession`, the cache, your server, the sync engine and every action that changes mail. Each app's `AppModel` owns one and adds its own navigation, so sending, undo and connecting accounts behave the same on both. There's no account to sign in to: the session is ready once it has a mail account or a server.
 
 ## How a change flows
 
@@ -46,25 +46,28 @@ Api modules are tested by injecting requests into a fully built app on PGlite (i
 
 Each app target holds its views, grouped by feature, plus `AppModel`. The Mac's adds `Command` (the keymap that drives keys, the palette, the shortcut sheet and the menu bar). The iPhone's is built for touch: swipes and long presses instead of keys, a sheet for the composer and toasts in a window of their own so they show over sheets.
 
-Run the Mac app against a local api: start the api (`PORT=4317 PUBLIC_URL=http://localhost:4317 pnpm --filter api dev`), seed it once (`SEED_DATABASE_URL=<dev database> pnpm --filter api seed`; the seed never touches `DATABASE_URL`), build, then `open "…/bMail.app" --args -serverURL http://localhost:4317`. The iPhone app takes the same arguments in the simulator: `xcrun simctl launch booted be.baree.mail -serverURL http://localhost:4317`. Debug builds of both also accept `-sessionToken <token>` and `-resetCache YES`.
+Run the Mac app against a local api: start the api (`PORT=4317 PUBLIC_URL=http://localhost:4317 pnpm --filter api dev`), seed it once (`SEED_DATABASE_URL=<dev database> pnpm --filter api seed`; the seed never touches `DATABASE_URL`, claims the database and prints the token for `-sessionToken`), build, then `open "…/bMail.app" --args -serverURL http://localhost:4317 -sessionToken <token>`. The iPhone app takes the same arguments in the simulator: `xcrun simctl launch booted be.baree.mail -serverURL http://localhost:4317 -sessionToken <token>`. Debug builds of both also accept `-resetCache YES`.
 
 ## Things you need to know
 
 - Views read with `@FetchAll`/`@Fetch` and never write. Writes go through `MailStore`, which keeps derived list columns, the search index and pending mutations consistent; a sync that races your own change replays the pending mutations on top.
 - Raw GRDB SQL binds a `UUID` as a blob, but the tables store ids as lowercase text (StructuredQueries' format). Bind `uuidString.lowercased()` in raw SQL, or use the query builder.
 - Gmail ids become our ids through `UUID(stableFrom:)`, so a resync updates rows instead of duplicating them.
-- The Google OAuth client id lives in `project.yml` (`GOOGLE_CLIENT_ID`, an iOS-type Google client). Without it Gmail isn't offered. Sign in with Apple appears only in builds that carry its entitlement.
+- The Google OAuth client id lives in `project.yml` (`GOOGLE_CLIENT_ID`, an iOS-type Google client). Without it Gmail isn't offered.
+- Gmail tokens and the server link (address and owner token) are synced Keychain items, so what you add on the Mac shows up on the iPhone through iCloud Keychain, and removing it removes it everywhere. The Mac needs `keychain-access-groups` for that, which only launches with an embedded provisioning profile: `release.yml` embeds the `DEVELOPER_ID_PROVISIONING_PROFILE` secret when it's set and strips the entitlement otherwise, and `Keychain` falls back to items on this device.
+- Labels on Gmail mail are Gmail labels (`MailLabel.accountID`, created and synced through Gmail's api); labels on mail on your domains live on your server. Views and agents show labels by name, so a name on both is one label.
 - Sync correctness lives in `packages/db/migrations/0001_sync_seq.sql`: `next_change` holds a row lock on the user's counter until commit, so rows commit in seq order and a cursor never skips a late commit. Every synced table needs the trigger.
 - Tracked mail is instrumented only on the way out. The stored html is what was written, which is what lets the app show your own sent mail without counting an open. The app also blocks every `t.*` tracking host in its web views.
 - Ids for new rows the app creates (messages, conversations, mailboxes) are generated by the app. That makes retries idempotent and lets optimistic local rows keep their id.
-- Attachments never pass through the api: the app uploads to a presigned R2 url and Resend downloads from a presigned url. Vercel caps request bodies at 4.5 MB.
-- Better Auth runs with the bearer plugin; the native app never has cookies. Only `ALLOWED_EMAILS` can have an account, and only with a proven email: Apple verified it, or `pnpm --filter api password` created it, which takes the database. Password sign-up is off because it proves nothing, and any account can spend the operator's Resend account.
+- Attachments never pass through the api: the app uploads to a presigned storage url (Blob or R2) and Resend downloads from one. Vercel caps request bodies at 4.5 MB.
+- A server has one owner and no accounts. The first `POST /claim` on a fresh server creates the owner and returns the owner token; private routes check its sha256 in `owner_tokens`. A claimed server only takes another claim with the host's `CLAIM_CODE`, which replaces every token. Tokens from the Better Auth days still work: the migration kept the hash of each live session's token and `authenticate` drops the signature after the dot.
+- The only required env var is `DATABASE_URL`, so the deploy button needs no typing. The tracking secret is generated into `server_settings` on first boot, and the Resend key arrives from the app (`PUT /server/resend`), which also creates the server's own Resend webhook. Env values win over both, so servers from before keep their tracking secret. Migrations run in `vercel-build`, production builds only.
 - Releases come from tags. Pushing `v1.2.3` runs `.github/workflows/release.yml`, which builds on the `xcode-27` runner, signs with the Developer ID certificate, notarizes and attaches `bMail-1.2.3.dmg` to a GitHub release. The version comes from the tag, not `project.yml`.
-- The iPhone app ships through TestFlight from Xcode: archive the `Mail` scheme in `apps/ios` and upload it. Both apps share the bundle id `be.baree.mail`, so one App ID carries Sign in with Apple and one Google client serves both.
+- The iPhone app ships through TestFlight from Xcode: archive the `Mail` scheme in `apps/ios` and upload it. Both apps share the bundle id `be.baree.mail`, so one App ID carries the shared Keychain group and one Google client serves both.
 - Agents reach mail through `Agents`: MCP on `127.0.0.1:6245/mcp` with the bearer token from Settings, built on the official Swift SDK with a fresh SDK server per request. Each account's level (Off, Read, Organize, Ask to send, Send) is checked on every call, and an account at Off must not show up anywhere. The tools only decide; the app carries out their effects through `MailSession`, so agent actions get the same toasts, undo and send window as yours. Ask to send opens the message in the composer and posts a notification that can send it.
 - On iPhone a message body is pinned to the reader's width and scaled down when it's wider (`EmailDocument.fitScript`). Pages load ahead of time while off screen, where WebKit would lay them out 980 points wide.
-- AI runs on the device with the user's own key, never through the api. Tab completion keeps the gray suggestion in the editor's text (`ComposerText`) and every edit takes it back out, so `body` never holds it. Auto labelling runs after each sync pass on new inbox mail, only with labels that have a description (synced through the api). The `labelDecisions` table remembers what it applied, so a label you take off becomes a correction in the next prompt.
-- There is no shared server. Everyone hosts their own api (README) and enters its address on the sign-in screen, which checks `/health` before switching.
+- AI runs on the device with the user's own key, never through the api. Tab completion keeps the gray suggestion in the editor's text (`ComposerText`) and every edit takes it back out, so `body` never holds it. Auto labelling runs after each sync pass on new inbox mail, only with labels that have a description. Descriptions are per label name and kept on the device with the rest of the AI setup, since Gmail labels have no field for one. The `labelDecisions` table remembers what it applied, so a label you take off becomes a correction in the next prompt.
+- There is no shared server, and Gmail needs none. Your own domains and tracking need the api you host (README). The app gets its address from Vercel's deploy flow (`getbmail.si/connect` opens `bmail://connect?server=…`) or from you typing it, and always asks before it claims or connects.
 - Fastify scoping matters: cross-cutting plugins use `fastify-plugin`, the error handler is registered before route modules and private routes live in the scope that adds the `authenticate` hook.
 - The api has no build step. Locally tsx runs the TS source; on Vercel the Fastify preset compiles `app.ts` and calls its default export.
 - Production api logs are plain JSON on stdout. Never add a log shipper to the code.

@@ -2,8 +2,9 @@ import Foundation
 import MailCore
 import SQLiteData
 
-/// One Gmail account, straight from the Mac. First sync takes the newest threads; after that Gmail's history api says
-/// which threads changed since the stored history id, and only those are fetched again.
+/// One Gmail account, straight from the device. First sync takes the newest threads; after that Gmail's history api
+/// says which threads changed since the stored history id, and only those are fetched again. Labels you made in Gmail
+/// are bMail labels, and labeling Gmail mail in bMail labels it in Gmail.
 public struct GmailProvider: MailProvider {
     /// How many threads the first sync pulls. Older mail is still found through search.
     static let initialThreads = 300
@@ -13,9 +14,10 @@ public struct GmailProvider: MailProvider {
     private let api: GmailAPI
     private let store: MailStore
     private let mapping: GmailMapping
-    private let tracking: ServerTracking
+    /// Your server, which tracks opens and clicks. Without one, mail goes out untracked.
+    private let tracking: ServerTracking?
 
-    public init(account: Account, client: OAuthClient, store: MailStore, tracking: ServerTracking) {
+    public init(account: Account, client: OAuthClient, store: MailStore, tracking: ServerTracking?) {
         self.source = "gmail:\(account.id)"
         self.accountID = account.id
         self.api = GmailAPI(tokens: TokenStore(accountID: account.id, client: client))
@@ -29,30 +31,43 @@ public struct GmailProvider: MailProvider {
     }
 
     public func pull(after cursor: String?) async throws -> ChangeSet {
+        // Every pass: renaming a label in Gmail leaves no trace in its history.
+        let list: Gmail.LabelList = try await api.get("labels")
+        let labels = (list.labels ?? []).filter { $0.type == "user" }
+        var changes = try await pullMail(after: cursor, labels: Set(labels.map(\.id)))
+        let stored = try await store.database.read { [accountID] db in try MailLabel.where { $0.accountID.eq(accountID) }.fetchAll(db) }
+        let fresh = labels.map(mapping.label)
+        let freshIDs = Set(fresh.map(\.id))
+        changes.labels = fresh.filter { !stored.contains($0) }
+        changes.removedLabelIDs = stored.map(\.id).filter { !freshIDs.contains($0) }
+        return changes
+    }
+
+    private func pullMail(after cursor: String?, labels: Set<String>) async throws -> ChangeSet {
         switch cursor.map(SyncPosition.init) {
         case nil:
             // Taken before the first page, so whatever changes while the first sync pages through is caught after.
             let profile: Gmail.Profile = try await api.get("profile")
-            return try await initialPage(.init(historyID: profile.historyId))
-        case let .initial(page): return try await initialPage(page)
+            return try await initialPage(.init(historyID: profile.historyId), labels: labels)
+        case let .initial(page): return try await initialPage(page, labels: labels)
         case let .history(historyID):
             do {
-                return try await changes(since: historyID)
+                return try await changes(since: historyID, labels: labels)
             } catch is GmailNotFound {
                 // History ids expire after about a week offline; start over from the newest threads.
-                return try await pull(after: nil)
+                return try await pullMail(after: nil, labels: labels)
             }
         }
     }
 
     /// One page of the newest threads. The cursor remembers how far the first sync got, so a failure halfway resumes
     /// instead of starting over, and the inbox fills in while the rest loads.
-    private func initialPage(_ position: SyncPosition.InitialPage) async throws -> ChangeSet {
+    private func initialPage(_ position: SyncPosition.InitialPage, labels: Set<String>) async throws -> ChangeSet {
         var query = ["maxResults": "50", "q": "-in:chats"]
         if let pageToken = position.pageToken { query["pageToken"] = pageToken }
         let page: Gmail.ThreadList = try await api.get("threads", query: query)
         let ids = (page.threads ?? []).map(\.id)
-        var changes = try await fetch(threads: ids)
+        var changes = try await fetch(threads: ids, labels: labels)
         let fetched = position.fetched + ids.count
         if let next = page.nextPageToken, fetched < Self.initialThreads {
             changes.cursor = SyncPosition.initial(.init(historyID: position.historyID, pageToken: next, fetched: fetched)).cursor
@@ -93,7 +108,7 @@ public struct GmailProvider: MailProvider {
         }
     }
 
-    private func changes(since historyID: String) async throws -> ChangeSet {
+    private func changes(since historyID: String, labels: Set<String>) async throws -> ChangeSet {
         var touched = Set<String>()
         var latest = historyID
         var pageToken: String?
@@ -109,15 +124,16 @@ public struct GmailProvider: MailProvider {
             latest = page.historyId
             pageToken = page.nextPageToken
         } while pageToken != nil
-        var changes = try await fetch(threads: Array(touched))
+        var changes = try await fetch(threads: Array(touched), labels: labels)
         changes.cursor = latest
         return changes
     }
 
-    /// Fetches full threads, eight at a time. A thread that's gone was deleted and leaves the cache too, and so does a
-    /// cached message its thread no longer has (deleted in Gmail).
-    private func fetch(threads ids: [String]) async throws -> ChangeSet {
+    /// Fetches full threads, eight at a time, with the ones of your `labels` they carry. A thread that's gone was
+    /// deleted and leaves the cache too, and so does a cached message its thread no longer has (deleted in Gmail).
+    private func fetch(threads ids: [String], labels: Set<String>) async throws -> ChangeSet {
         var changes = ChangeSet()
+        changes.labelAccountID = accountID
         try await withThrowingTaskGroup(of: (String, Gmail.Thread?).self) { group in
             var pending = ids[...]
             func next() {
@@ -135,6 +151,7 @@ public struct GmailProvider: MailProvider {
                 if let thread, let (conversation, messages) = mapping.conversation(thread) {
                     changes.conversations.append(conversation)
                     changes.messages += messages
+                    changes.conversationLabels[conversation.id] = Set(mapping.labelIDs(thread).intersection(labels).map(mapping.labelID))
                 } else {
                     changes.removedConversationIDs.append(mapping.conversationID(thread: id))
                 }
@@ -164,7 +181,41 @@ public struct GmailProvider: MailProvider {
             case .spam: try await modify(threadID, add: ["SPAM"], remove: ["INBOX"])
             case .trash: let _: Gmail.Thread = try await api.post("threads/\(threadID)/trash", body: GmailAPI.Empty())
             }
-        case .label: return
+        case let .label(_, labelID, isOn):
+            guard let label = try await store.database.read({ db in try MailLabel.find(labelID).fetchOne(db)?.remoteID }) else { return }
+            try await modify(threadID, add: isOn ? [label] : [], remove: isOn ? [] : [label])
+        }
+    }
+
+    /// Makes a label in Gmail, or finds the one already called that.
+    public func createLabel(named name: String) async throws -> MailLabel {
+        let list: Gmail.LabelList = try await api.get("labels")
+        if let existing = list.labels?.first(where: { $0.type == "user" && $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            return mapping.label(existing)
+        }
+        struct Body: Encodable {
+            var name: String
+            var labelListVisibility = "labelShow"
+            var messageListVisibility = "show"
+        }
+        let created: Gmail.Label = try await api.post("labels", body: Body(name: name))
+        return mapping.label(created)
+    }
+
+    public func renameLabel(_ label: MailLabel, to name: String) async throws -> MailLabel {
+        struct Body: Encodable { var name: String }
+        guard let remoteID = label.remoteID else { throw ProviderError(.rejected, "Gmail doesn't know \(label.name).") }
+        let renamed: Gmail.Label = try await api.patch("labels/\(remoteID)", body: Body(name: name))
+        return mapping.label(renamed)
+    }
+
+    /// Takes the label off every thread in Gmail too.
+    public func deleteLabel(_ label: MailLabel) async throws {
+        guard let remoteID = label.remoteID else { return }
+        do {
+            try await api.delete("labels/\(remoteID)")
+        } catch is GmailNotFound {
+            return
         }
     }
 
@@ -179,7 +230,10 @@ public struct GmailProvider: MailProvider {
     public func send(_ message: OutgoingMessage) async throws -> ChangeSet {
         var message = message
         // Gmail's copy keeps this id (see X-Bmail-ID), so it's the one the opens are recorded under.
-        if message.trackingEnabled { message.html = try await tracking.instrument(message.html, id: message.id) }
+        if message.trackingEnabled {
+            guard let tracking else { throw ProviderError(.rejected, "Tracking needs your server. Send it untracked or connect one in Settings.") }
+            message.html = try await tracking.instrument(message.html, id: message.id)
+        }
         let (threadID, parent) = try await store.database.read { [message] db in
             let conversation = try Conversation.find(message.conversationID).fetchOne(db)
             let parent = try Message.where { $0.conversationID.eq(message.conversationID) && $0.id.neq(message.id) }
@@ -199,7 +253,10 @@ public struct GmailProvider: MailProvider {
         }
         let sent: Gmail.Sent = try await api.post("messages/send", body: Body(raw: try mime.render().base64URLEncoded, threadId: threadID))
         // The mail is out, so a failed read-back mustn't fail the send: the next pull brings Gmail's copy.
-        var changes = (try? await fetch(threads: [sent.threadId])) ?? ChangeSet()
+        let labels = try await store.database.read { [accountID] db in
+            try MailLabel.where { $0.accountID.eq(accountID) }.select(\.remoteID).fetchAll(db)
+        }
+        var changes = (try? await fetch(threads: [sent.threadId], labels: Set(labels.compactMap(\.self)))) ?? ChangeSet()
         // Gmail's copy has the message's id but not the conversation's: a new thread replaces the optimistic one.
         if !changes.messages.contains(where: { $0.id == message.id }) { changes.removedMessageIDs.append(message.id) }
         changes.removedConversationIDs = threadID == nil ? [message.conversationID] : []

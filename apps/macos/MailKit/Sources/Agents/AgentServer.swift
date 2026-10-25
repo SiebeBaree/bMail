@@ -95,6 +95,8 @@ public final class AgentServer {
         switch effect {
         case let .apply(mutations, toast):
             session.apply(mutations, toast: toast)
+        case let .toggleLabel(name, ids, toast):
+            session.toggleLabel(named: name, on: ids, toast: toast)
         case let .send(draft):
             // Undo brings it back as a message to review instead of losing it.
             session.send(draft.message, detail: "Written by \(draft.agent)") { [weak self] in self?.review(draft) }

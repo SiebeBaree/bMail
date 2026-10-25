@@ -113,7 +113,7 @@ extension TrackedLink {
 
 extension MailLabel {
     init(_ wire: Wire.Label) {
-        self.init(id: UUID(wire: wire.id), name: wire.name, description: wire.description)
+        self.init(id: UUID(wire: wire.id), name: wire.name)
     }
 }
 

@@ -90,18 +90,57 @@ import Testing
         #expect(try store.search("nothing here").isEmpty)
     }
 
-    @Test func signingOutLeavesNothingBehind() throws {
-        let conversation = conversation(subject: "Contract draft v3")
-        try store.merge(changes([conversation], [message(in: conversation, minutesAgo: 1, text: "Page 4")]), source: "server")
-        try store.perform([.setRead(conversation.id, true)])
+    @Test func disconnectingTheServerKeepsGmail() throws {
+        let gmail = Account(id: UUID(), kind: .gmail, address: "siebe@gmail.com", displayName: "siebe@gmail.com", domainID: nil, position: 1)
+        let domainMail = conversation(subject: "Contract draft v3")
+        var gmailMail = conversation(subject: "Dinner on Friday")
+        gmailMail.accountID = gmail.id
+        let serverLabel = MailLabel(id: UUID(), name: "Clients")
+        let gmailLabel = MailLabel(id: UUID(), name: "Friends", accountID: gmail.id, remoteID: "Label_1")
+        var synced = changes([domainMail, gmailMail], [message(in: domainMail, minutesAgo: 2, text: "Page 4"), message(in: gmailMail, minutesAgo: 1)])
+        synced.accounts = [gmail]
+        synced.labels = [serverLabel, gmailLabel]
+        synced.events = [MessageEvent(id: UUID(), messageID: UUID(), kind: .opened, source: .person, url: nil, device: nil, city: nil, country: nil, detail: nil, occurredAt: Date())]
+        synced.cursor = "42"
+        try store.merge(synced, source: "server")
+        var gmailCursor = ChangeSet()
+        gmailCursor.cursor = "9001"
+        try store.merge(gmailCursor, source: "gmail:\(gmail.id)")
 
-        try store.eraseAll()
+        try store.eraseServerData()
 
-        let left = try store.database.read { db in
-            try Account.fetchCount(db) + Conversation.fetchCount(db) + PendingMutation.fetchCount(db) + SyncCursor.fetchCount(db)
+        let (accounts, conversations, labels, events, cursors) = try store.database.read { db in
+            (
+                try Account.fetchAll(db).map(\.id), try Conversation.fetchAll(db).map(\.id), try MailLabel.fetchAll(db).map(\.id),
+                try MessageEvent.fetchCount(db), try SyncCursor.fetchAll(db).map(\.source)
+            )
         }
-        #expect(left == 0)
-        #expect(try store.search("contract").isEmpty)
+        #expect(accounts == [gmail.id])
+        #expect(conversations == [gmailMail.id])
+        #expect(labels == [gmailLabel.id])
+        #expect(events == 0)
+        #expect(cursors == ["gmail:\(gmail.id)"])
+        #expect(try store.search("page").isEmpty)
+    }
+
+    @Test func aGmailLabelSetLeavesTheServersLabelsAlone() throws {
+        let conversation = conversation()
+        let serverLabel = MailLabel(id: UUID(), name: "Clients")
+        let gmailLabel = MailLabel(id: UUID(), name: "Clients", accountID: account.id, remoteID: "Label_1")
+        var synced = changes([conversation], [message(in: conversation, minutesAgo: 1)])
+        synced.labels = [serverLabel, gmailLabel]
+        synced.conversationLabels = [conversation.id: [serverLabel.id]]
+        try store.merge(synced, source: "server")
+        var fromGmail = ChangeSet()
+        fromGmail.labelAccountID = account.id
+        fromGmail.conversationLabels = [conversation.id: [gmailLabel.id, serverLabel.id]]
+        try store.merge(fromGmail, source: "gmail")
+        // Gmail can only set its own labels, so the server's id in its set is ignored and the server's label stays.
+        #expect(try labels(of: conversation.id) == [serverLabel.id, gmailLabel.id].sorted())
+
+        fromGmail.conversationLabels = [conversation.id: []]
+        try store.merge(fromGmail, source: "gmail")
+        #expect(try labels(of: conversation.id) == [serverLabel.id])
     }
 
     @Test func trackedLinksResolveToTheirOriginalDestination() throws {

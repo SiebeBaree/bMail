@@ -51,12 +51,15 @@ public struct MailStore: Sendable {
             for label in changes.labels {
                 try MailLabel.upsert { label }.execute(db)
             }
-            let known = Set(try MailLabel.select(\.id).fetchAll(db))
-            for (conversationID, labelIDs) in changes.conversationLabels {
-                try ConversationLabel.where { $0.conversationID.eq(conversationID) }.delete().execute(db)
-                // A label deleted on another Mac can still be in a set that was saved before.
-                for labelID in labelIDs where known.contains(labelID) {
-                    try ConversationLabel.insert { ConversationLabel(conversationID: conversationID, labelID: labelID) }.execute(db)
+            if !changes.conversationLabels.isEmpty {
+                let owner = changes.labelAccountID
+                let owned = try MailLabel.where { $0.accountID.is(owner) }.select(\.id).fetchAll(db)
+                for (conversationID, labelIDs) in changes.conversationLabels {
+                    try ConversationLabel.where { $0.conversationID.eq(conversationID) && $0.labelID.in(owned) }.delete().execute(db)
+                    // A label deleted on another device can still be in a set that was saved before.
+                    for labelID in labelIDs where owned.contains(labelID) {
+                        try ConversationLabel.insert { ConversationLabel(conversationID: conversationID, labelID: labelID) }.execute(db)
+                    }
                 }
             }
             for tracked in changes.trackedSends {
@@ -82,16 +85,36 @@ public struct MailStore: Sendable {
         try database.read { db in try SyncCursor.find(source).fetchOne(db)?.cursor }
     }
 
-    /// Empties the cache, for signing out: everything in it belongs to whoever was signed in.
-    public func eraseAll() throws {
+    /// Forgets everything that came from your server: your domains with their mail, the server's labels and every
+    /// tracking event. Gmail stays. For disconnecting the server or switching to another one.
+    public func eraseServerData() throws {
         try database.write { db in
-            // Deleting accounts and domains cascades to their conversations and messages.
-            for table in [
-                "accounts", "domains", "pendingMutations", "outboxItems", "syncCursors", "contacts", "messageTexts", "labels",
-                "conversationLabels", "trackedSends", "messageEvents", "labelDecisions",
-            ] {
-                try db.execute(sql: #"DELETE FROM "\#(table)""#)
+            let domainAccounts = try Account.where { $0.kind.eq(Account.Kind.domain) }.select(\.id).fetchAll(db)
+            let messages = try Message.where { $0.accountID.in(domainAccounts) }.select(\.id).fetchAll(db)
+            for id in messages {
+                try db.execute(
+                    sql: #"DELETE FROM "messageTexts" WHERE "rowid" = (SELECT "rowid" FROM "messages" WHERE "id" = ?)"#,
+                    arguments: [id.uuidString.lowercased()]
+                )
             }
+            // Deleting the accounts cascades to their conversations and messages.
+            try Account.where { $0.kind.eq(Account.Kind.domain) }.delete().execute(db)
+            try Domain.delete().execute(db)
+            try MailLabel.where { $0.accountID.is(nil) }.delete().execute(db)
+            try TrackedSend.delete().execute(db)
+            try MessageEvent.delete().execute(db)
+            try SyncCursor.find("server").delete().execute(db)
+        }
+    }
+
+    // MARK: - Labels
+
+    /// Whose labels each conversation carries: its Gmail account's, or your server's (nil) for mail on your domains.
+    public func labelOwners(of ids: [Conversation.ID]) throws -> [Conversation.ID: Account.ID?] {
+        try database.read { db in
+            let gmail = Set(try Account.where { $0.kind.eq(Account.Kind.gmail) }.select(\.id).fetchAll(db))
+            let pairs = try Conversation.where { $0.id.in(ids) }.select { ($0.id, $0.accountID) }.fetchAll(db)
+            return Dictionary(pairs.map { id, accountID in (id, gmail.contains(accountID) ? Optional(accountID) : nil) }) { first, _ in first }
         }
     }
 

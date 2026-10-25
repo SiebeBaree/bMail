@@ -7,12 +7,16 @@ import Providers
 import SQLiteData
 
 /// Your mail on this device: the cache, your server, the sync engine and every action that changes mail. Each app's
-/// model owns one and puts its own navigation on top, so sending, undo and signing out work the same on the Mac and the
-/// iPhone.
+/// model owns one and puts its own navigation on top, so sending, undo and connecting accounts work the same on the
+/// Mac and the iPhone.
+///
+/// There's no account to sign in to. The app is ready as soon as it has a mail account or your server, and both live
+/// in iCloud Keychain, so what you add on one device shows up on the others.
 @MainActor
 @Observable
 public final class MailSession {
-    public enum Phase: Sendable { case signedOut, ready }
+    /// `welcome` until there's a mail account or a server to read from.
+    public enum Phase: Sendable { case welcome, ready }
 
     public let store: MailStore
     public let syncStatus = SyncStatus()
@@ -23,9 +27,9 @@ public final class MailSession {
     public internal(set) var aiProblem: String?
     /// Gmail access, from the build's OAuth client. Without one Gmail isn't offered.
     public let google: OAuthClient?
-    /// The api for your domains. Nil until you first sign in, which is where you say which server is yours.
+    /// The api you host for your own domains and tracking. Nil until you connect one.
     public private(set) var server: ServerConnection?
-    public private(set) var phase: Phase = .signedOut
+    public private(set) var phase: Phase = .welcome
     /// Conversations unsubscribed from since launch, so the button can say it worked.
     public private(set) var unsubscribed: Set<Conversation.ID> = []
     /// Message bodies, loaded ahead of time. Set at the end of init: links tapped inside them need the session.
@@ -36,25 +40,18 @@ public final class MailSession {
     @ObservationIgnored public var didUndo: @MainActor ([Mutation]) -> Void = { _ in }
     @ObservationIgnored private let engine: MailSyncEngine
     @ObservationIgnored private var labeller: Labeller!
+    @ObservationIgnored private var isStarted = false
     /// Each entry is one action, which can have changed many conversations at once. Its toast undoes that action and
     /// no other, even after newer ones.
     @ObservationIgnored private var undoStack: [(id: UUID, mutations: [Mutation])] = []
 
     public init(google: OAuthClient?) {
         self.google = google
-        // The cache and the session belong to one server, so pointing the app at another starts signed out with an
-        // empty cache. `--args -resetCache YES` empties it on purpose.
-        let defaults = UserDefaults.standard
-        // Builds from before the server step only recorded the server as the cache's, so that one carries over.
-        let serverURL = (defaults.string(forKey: "serverURL") ?? defaults.string(forKey: "cacheServerURL")).flatMap(URL.init(string:))
-        let serverChanged = defaults.string(forKey: "cacheServerURL") != serverURL?.absoluteString
-        if serverChanged { Keychain.delete(ServerConnection.sessionKey) }
-        defaults.set(serverURL?.absoluteString, forKey: "cacheServerURL")
-        let reset = serverChanged || defaults.bool(forKey: "resetCache")
         // The cache only holds what can be synced again, so one that won't open is deleted and rebuilt.
+        // `--args -resetCache YES` empties it on purpose.
         let database: any DatabaseWriter
         do {
-            database = try appDatabase(reset: reset)
+            database = try appDatabase(reset: UserDefaults.standard.bool(forKey: "resetCache"))
         } catch {
             do {
                 database = try appDatabase(reset: true)
@@ -64,117 +61,152 @@ public final class MailSession {
         }
         prepareDependencies { $0.defaultDatabase = database }
         store = MailStore(database: database)
-        server = serverURL.map(ServerConnection.init(baseURL:))
         engine = MailSyncEngine(store: store, status: syncStatus)
-        pages = MailPages(store: store, apiHost: { [weak self] in self?.server?.baseURL.host() }, open: { [weak self] in self?.openLink($0) })
-        labeller = Labeller(session: self)
         #if DEBUG
-            // Scripted runs against a local api: `--args -sessionToken <token>` signs in without typing.
-            if let token = defaults.string(forKey: "sessionToken") {
-                Keychain.write(token, for: ServerConnection.sessionKey)
+            // Scripted runs against a local api: `--args -serverURL <url> -sessionToken <token>` connects without claiming.
+            let defaults = UserDefaults.standard
+            if let url = defaults.string(forKey: "serverURL").flatMap(URL.init(string:)), let token = defaults.string(forKey: "sessionToken") {
+                ServerLink(url: url, token: token).save()
             }
         #endif
-        if server?.isSignedIn == true { start() }
+        server = ServerLink.load().map(ServerConnection.init)
+        pages = MailPages(store: store, apiHost: { [weak self] in self?.server?.baseURL.host() }, open: { [weak self] in self?.openLink($0) })
+        labeller = Labeller(session: self)
+        adoptAccountsFromKeychain()
+        updatePhase()
     }
 
-    // MARK: - Signing in and out
+    // MARK: - Accounts and your server
 
-    /// Points the app at the server typed on the sign-in screen and remembers it. The cache and the session belong to one
-    /// server, so another one starts both over. Development can skip the typing: `--args -serverURL <url>`.
-    @discardableResult
-    public func connect(to url: URL) throws -> ServerConnection {
-        if let server, server.baseURL == url { return server }
-        try store.eraseAll()
-        Keychain.delete(ServerConnection.sessionKey)
-        UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
-        UserDefaults.standard.set(url.absoluteString, forKey: "cacheServerURL")
-        let server = ServerConnection(baseURL: url)
-        self.server = server
-        return server
-    }
+    /// Whether mail can go out tracked: tracking runs on your server.
+    public var canTrack: Bool { server != nil }
 
-    /// Domain, mailbox and label changes, which go straight to your server.
+    /// Domain, mailbox, label and Resend changes, which go straight to your server.
     public var admin: ServerAdmin {
         get throws {
-            guard let server else { throw ProviderError(.rejected, "Sign in to your server first.") }
+            guard let server else { throw ProviderError(.rejected, "Connect your server first.") }
             return ServerAdmin(connection: server)
         }
     }
 
-    public func start() {
-        phase = .ready
+    /// Ready once there's something to read from. The engine starts the first time it is.
+    private func updatePhase() {
+        phase = accounts.isEmpty && server == nil ? .welcome : .ready
+        guard phase == .ready, !isStarted else { return }
+        isStarted = true
         pages.warmUp()
         configureProviders()
         let afterPass: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.labeller.run() } }
-        Task { [engine] in
+        Task {
             await engine.setAfterPass(afterPass)
             await engine.start()
+            await moveServerLabelsToGmail()
         }
     }
 
-    /// One provider for your domains plus one per Gmail account. Called again whenever accounts change.
+    /// One provider for your server plus one per Gmail account. Called again whenever accounts change.
     public func configureProviders() {
-        guard let server else { return }
-        var providers: [any MailProvider] = [ServerProvider(connection: server, store: store)]
-        for account in accounts {
-            switch account.kind {
-            case .domain: continue
-            case .gmail:
-                if let google {
-                    providers.append(GmailProvider(account: account, client: google, store: store, tracking: ServerTracking(connection: server)))
-                }
+        let tracking = server.map(ServerTracking.init(connection:))
+        var providers: [any MailProvider] = server.map { [ServerProvider(connection: $0, store: store)] } ?? []
+        if let google {
+            for account in accounts where account.kind == .gmail {
+                providers.append(GmailProvider(account: account, client: google, store: store, tracking: tracking))
             }
         }
         Task { [engine] in await engine.setProviders(providers) }
     }
 
-    /// Adds a Gmail account after its OAuth sign-in. The id follows from the address, so connecting the same
-    /// account again replaces it instead of adding a second one.
+    /// Adds a Gmail account after its OAuth sign-in. The id follows from the address, so connecting the same account
+    /// again, here or on another device, replaces it instead of adding a second one.
     public func connectGmail(tokens: OAuthTokens) throws {
         guard let address = tokens.email?.lowercased() else {
             throw ProviderError(.rejected, "The sign-in didn't say which account it was for. Try again.")
         }
-        let account = Account(
-            id: UUID(stableFrom: "gmail:\(address)"), kind: .gmail, address: address,
-            displayName: address, domainID: nil, position: 1_000 + accounts.count
-        )
+        let account = gmailAccount(address)
         try TokenStore.save(tokens, for: account.id)
         var changes = ChangeSet()
         changes.accounts = [account]
         try store.merge(changes, source: "settings")
         configureProviders()
+        updatePhase()
         toasts.show(Toast("Connected \(address)", detail: "Your mail is syncing.", symbol: "checkmark", tone: .success))
     }
 
+    private func gmailAccount(_ address: String) -> Account {
+        Account(
+            id: UUID(stableFrom: "gmail:\(address)"), kind: .gmail, address: address,
+            displayName: address, domainID: nil, position: 1_000 + accounts.count
+        )
+    }
+
+    /// Removes a Gmail account from every device, since its tokens leave iCloud Keychain with it.
     public func disconnect(_ account: Account) throws {
-        Keychain.delete("oauth.\(account.id.uuidString)")
+        TokenStore.forget(account.id)
         var changes = ChangeSet()
         changes.removedAccountIDs = [account.id]
         try store.merge(changes, source: "settings")
         try? store.database.write { db in try SyncCursor.find("\(account.kind.rawValue):\(account.id)").delete().execute(db) }
         configureProviders()
+        updatePhase()
     }
 
-    /// Signing out makes this device forget the account: the cache and every Gmail token goes with it, so the next
-    /// person to sign in starts clean.
-    public func signOut() async {
-        await engine.stop()
-        await server?.signOut()
-        for account in accounts where account.kind != .domain {
-            Keychain.delete("oauth.\(account.id.uuidString)")
+    /// Gmail accounts added or removed on another device, which only says so through iCloud Keychain. Runs at launch
+    /// and whenever the app comes back to the front.
+    private func adoptAccountsFromKeychain() {
+        guard google != nil, let keys = Keychain.keys(withPrefix: TokenStore.keyPrefix) else { return }
+        let stored = Set(accounts.filter { $0.kind == .gmail }.map(\.id))
+        let synced = Set(keys.compactMap { UUID(uuidString: String($0.dropFirst(TokenStore.keyPrefix.count))) })
+        let added = synced.subtracting(stored).compactMap { id in
+            TokenStore.load(for: id)?.email.map { gmailAccount($0.lowercased()) }.flatMap { $0.id == id ? $0 : nil }
         }
-        try? store.eraseAll()
-        ai.forget()
-        aiProblem = nil
-        undoStack = []
-        pages.removeAll()
-        phase = .signedOut
+        let removed = stored.subtracting(synced)
+        guard !added.isEmpty || !removed.isEmpty else { return }
+        var changes = ChangeSet()
+        changes.accounts = added
+        changes.removedAccountIDs = Array(removed)
+        try? store.merge(changes, source: "settings")
+        configureProviders()
+        updatePhase()
+    }
+
+    /// Whether a bMail server answers at `url`, and whether it has an owner yet.
+    public func ownership(of url: URL) async throws -> ServerConnection.Ownership {
+        try await ServerConnection(baseURL: url).ownership()
+    }
+
+    /// Becomes the owner of the server at `url` and connects to it. A server that has an owner takes its claim code.
+    public func claimServer(at url: URL, code: String? = nil) async throws {
+        let link = try await ServerConnection(baseURL: url).claim(code: code)
+        link.save()
+        adopt(link)
+        toasts.show(Toast("Connected to \(server?.host ?? url.absoluteString)", symbol: "checkmark", tone: .success))
+    }
+
+    /// Switches to `link`. What came from another server, its domains, labels and tracking, goes; Gmail stays.
+    private func adopt(_ link: ServerLink) {
+        if let server, server.baseURL != link.url { try? store.eraseServerData() }
+        server = ServerConnection(link)
+        configureProviders()
+        updatePhase()
+        engine.wake()
+    }
+
+    /// Forgets your server on every device, with your domains' mail and all tracking. Gmail stays.
+    public func disconnectServer() {
+        ServerLink.forget()
+        try? store.eraseServerData()
+        server = nil
+        configureProviders()
+        updatePhase()
     }
 
     // MARK: - Syncing
 
-    /// Pulls right away, e.g. when the app comes to the front.
+    /// Pulls right away, e.g. when the app comes to the front. Also picks up accounts and a server added on another
+    /// device.
     public func syncNow() {
+        adoptAccountsFromKeychain()
+        if server == nil, let link = ServerLink.load() { adopt(link) }
         engine.wake()
     }
 
@@ -279,33 +311,144 @@ public final class MailSession {
 
     // MARK: - Labels
 
-    /// Puts the label on every conversation, or takes it off when they all have it already.
-    public func toggleLabel(_ labelID: MailLabel.ID, on ids: [Conversation.ID]) {
-        guard !ids.isEmpty, let label = try? store.database.read({ db in try MailLabel.find(labelID).fetchOne(db) }) else { return }
-        let labeled = Set((try? store.database.read { db in
-            try ConversationLabel.where { $0.labelID.eq(labelID) && $0.conversationID.in(ids) }.select(\.conversationID).fetchAll(db)
-        }) ?? [])
+    /// Puts the label called `name` on every conversation, or takes it off when they all have it already. Gmail mail
+    /// gets its account's Gmail label and the rest gets your server's, each made first where it doesn't exist yet.
+    /// `toast` replaces the usual "Labeled …", for agents that say who did it.
+    public func toggleLabel(named name: String, on ids: [Conversation.ID], toast: String? = nil) {
+        let name = name.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, !ids.isEmpty, let owners = try? store.labelOwners(of: ids) else { return }
+        let labels = (try? self.labels(named: name)) ?? []
+        let assigned = (try? store.database.read { db in
+            try ConversationLabel.where { $0.labelID.in(labels.map(\.id)) && $0.conversationID.in(ids) }.fetchAll(db)
+        }) ?? []
+        let labeled = Set(assigned.map(\.conversationID))
         let isOn = labeled.count < ids.count
-        apply(ids.filter { labeled.contains($0) != isOn }.map { .label($0, labelID, isOn) }, toast: isOn ? "Labeled \(label.name)" : "Removed \(label.name)")
-    }
-
-    /// Creates a label on the api and puts it on the conversations.
-    public func createLabel(named name: String, on ids: [Conversation.ID]) {
-        let label = MailLabel(id: UUID(), name: name.trimmingCharacters(in: .whitespaces))
-        guard !label.name.isEmpty else { return }
+        guard isOn else {
+            apply(assigned.map { .label($0.conversationID, $0.labelID, false) }, toast: toast ?? "Removed \(name)")
+            return
+        }
+        let unlabeled = ids.filter { !labeled.contains($0) && owners[$0] != nil }
+        let missing = Set(unlabeled.map { owners[$0] ?? nil }).filter { owner in !labels.contains { $0.accountID == owner } }
         Task {
-            do {
-                try store.merge(try await admin.createLabel(label), source: "labels")
-                toggleLabel(label.id, on: ids)
-            } catch {
-                toasts.show(Toast("Couldn't create \(label.name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
+            var labels = labels
+            for owner in missing {
+                do {
+                    labels.append(try await createLabel(named: name, for: owner))
+                } catch {
+                    toasts.show(Toast("Couldn't create \(name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
+                    return
+                }
             }
+            let mutations = unlabeled.compactMap { id -> Mutation? in
+                labels.first { $0.accountID == owners[id] ?? nil }.map { .label(id, $0.id, true) }
+            }
+            apply(mutations, toast: toast ?? "Labeled \(name)")
         }
     }
 
-    /// Saves what belongs under a label. Auto labelling only applies labels that have this.
-    public func describeLabel(_ id: MailLabel.ID, as description: String) async throws {
-        try store.merge(try await admin.describeLabel(id, as: description), source: "labels")
+    /// Makes the label in Gmail for a Gmail account's mail, or on your server (`owner` nil) for the rest.
+    private func createLabel(named name: String, for owner: Account.ID?) async throws -> MailLabel {
+        let label: MailLabel
+        if let owner, let account = accounts.first(where: { $0.id == owner }) {
+            label = try await gmail(account).createLabel(named: name)
+        } else {
+            // The id is the app's, so a retry after a lost response returns the same label instead of a duplicate.
+            label = MailLabel(id: UUID(), name: name)
+            try store.merge(try await admin.createLabel(label), source: "labels")
+            return label
+        }
+        var changes = ChangeSet()
+        changes.labels = [label]
+        try store.merge(changes, source: "labels")
+        return label
+    }
+
+    /// Renames every label called `name`, in Gmail and on your server.
+    public func renameLabel(named name: String, to newName: String) async throws {
+        let newName = newName.trimmingCharacters(in: .whitespaces)
+        guard !newName.isEmpty, newName != name else { return }
+        for label in try labels(named: name) {
+            var changes = ChangeSet()
+            if let account = gmailAccount(of: label) {
+                changes.labels = [try await gmail(account).renameLabel(label, to: newName)]
+            } else {
+                changes = try await admin.renameLabel(label.id, to: newName)
+            }
+            try store.merge(changes, source: "labels")
+        }
+        if let description = ai.labelDescriptions.removeValue(forKey: name) { ai.labelDescriptions[newName] = description }
+    }
+
+    /// Deletes every label called `name` and takes it off every conversation, in Gmail and on your server.
+    public func deleteLabel(named name: String) async throws {
+        for label in try labels(named: name) {
+            var changes = ChangeSet()
+            if let account = gmailAccount(of: label) {
+                try await gmail(account).deleteLabel(label)
+                changes.removedLabelIDs = [label.id]
+            } else {
+                changes = try await admin.deleteLabel(label.id)
+            }
+            try store.merge(changes, source: "labels")
+        }
+        ai.labelDescriptions[name] = nil
+    }
+
+    /// The label called `name` that `owner`'s mail carries, made first if it doesn't exist yet.
+    func label(named name: String, for owner: Account.ID?) async throws -> MailLabel {
+        if let label = try labels(named: name).first(where: { $0.accountID == owner }) { return label }
+        return try await createLabel(named: name, for: owner)
+    }
+
+    private func labels(named name: String) throws -> [MailLabel] {
+        try store.database.read { db in try MailLabel.where { $0.name.eq(name) }.fetchAll(db) }
+    }
+
+    private func gmailAccount(of label: MailLabel) -> Account? {
+        label.accountID.flatMap { id in accounts.first { $0.id == id } }
+    }
+
+    /// Before Gmail labels, your server kept the labels on Gmail mail too. Once, on a device that still has those, they
+    /// become Gmail labels and leave the server.
+    private func moveServerLabelsToGmail() async {
+        let done = "movedServerLabelsToGmail"
+        guard server != nil, google != nil, !UserDefaults.standard.bool(forKey: done) else { return }
+        let moves: [(conversation: Conversation.ID, account: Account.ID, label: MailLabel)] = (try? await store.database.read { db in
+            let serverLabels = try MailLabel.where { $0.accountID.is(nil) }.fetchAll(db)
+            let gmail = try Conversation.where { $0.accountID.in(Account.where { $0.kind.eq(Account.Kind.gmail) }.select(\.id)) }
+                .select { ($0.id, $0.accountID) }.fetchAll(db)
+            let accountOf = Dictionary(gmail, uniquingKeysWith: { first, _ in first })
+            return try ConversationLabel.where { $0.labelID.in(serverLabels.map(\.id)) && $0.conversationID.in(gmail.map(\.0)) }.fetchAll(db)
+                .compactMap { pair in
+                    guard let account = accountOf[pair.conversationID], let label = serverLabels.first(where: { $0.id == pair.labelID }) else { return nil }
+                    return (pair.conversationID, account, label)
+                }
+        }) ?? []
+        var created: [String: MailLabel] = [:]
+        var mutations: [Mutation] = []
+        for move in moves {
+            let key = "\(move.account):\(move.label.name)"
+            do {
+                if created[key] == nil { created[key] = try await createLabel(named: move.label.name, for: move.account) }
+            } catch {
+                return
+            }
+            guard let gmailLabel = created[key] else { continue }
+            mutations += [.label(move.conversation, gmailLabel.id, true), .label(move.conversation, move.label.id, false)]
+        }
+        if !mutations.isEmpty {
+            try? store.perform(mutations)
+            engine.wake()
+        }
+        UserDefaults.standard.set(true, forKey: done)
+    }
+
+    /// Saves what belongs under the labels called `name`, on this device with the rest of the AI setup. Auto labelling
+    /// only applies labels that have this. Empty clears it.
+    public func describeLabel(named name: String, as description: String) {
+        let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        ai.labelDescriptions[name] = description.isEmpty ? nil : description
+        labeller.run()
     }
 
     // MARK: - AI
@@ -386,6 +529,9 @@ public final class MailSession {
     /// Holds the message for the undo window, then the sync engine sends it. Undo takes it out of the outbox and calls
     /// `reopen`, which brings back the composer it came from. `detail` goes under the countdown, to say who wrote it.
     public func send(_ message: OutgoingMessage, detail: String? = nil, reopen: @escaping @MainActor () -> Void) {
+        var message = message
+        // Tracking runs on your server. Without one, say an agent asked for it, the mail still goes, untracked.
+        if !canTrack { message.trackingEnabled = false }
         do {
             try store.enqueue(message, sendAt: Date().addingTimeInterval(TimeInterval(Self.undoWindow)))
             engine.wake()
@@ -430,17 +576,21 @@ public final class MailSession {
 
     /// An attachment's bytes. Links and Gmail's ids expire, so every open fetches fresh.
     public func download(_ attachment: Attachment, of message: Message) async throws -> Data {
-        guard let server, let account = accounts.first(where: { $0.id == message.accountID }) else {
+        guard let account = accounts.first(where: { $0.id == message.accountID }) else {
             throw ProviderError(.rejected, "That account is gone.")
         }
         switch account.kind {
         case .domain:
+            guard let server else { throw ProviderError(.rejected, "Connect your server to open this.") }
             let url = try await ServerProvider(connection: server, store: store).downloadURL(for: attachment.id)
             return try await URLSession.shared.data(from: url).0
         case .gmail:
-            guard let google else { throw ProviderError(.rejected, "This build can't reach Gmail.") }
-            return try await GmailProvider(account: account, client: google, store: store, tracking: ServerTracking(connection: server))
-                .download(attachment)
+            return try await gmail(account).download(attachment)
         }
+    }
+
+    private func gmail(_ account: Account) throws -> GmailProvider {
+        guard let google else { throw ProviderError(.rejected, "This build can't reach Gmail.") }
+        return GmailProvider(account: account, client: google, store: store, tracking: server.map(ServerTracking.init(connection:)))
     }
 }

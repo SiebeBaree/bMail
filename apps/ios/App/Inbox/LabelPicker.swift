@@ -19,7 +19,7 @@ struct LabelPicker: View {
             List {
                 if let name = newName {
                     Button {
-                        model.session.createLabel(named: name, on: conversations)
+                        model.session.toggleLabel(named: name, on: conversations)
                         query = ""
                     } label: {
                         Label("Create \u{201C}\(name)\u{201D}", systemImage: "plus")
@@ -28,16 +28,16 @@ struct LabelPicker: View {
                     }
                     .listRowBackground(Color.raised)
                 }
-                ForEach(matches) { label in
+                ForEach(matches, id: \.self) { label in
                     Button {
-                        model.session.toggleLabel(label.id, on: conversations)
+                        model.session.toggleLabel(named: label, on: conversations)
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: symbol(for: label))
                                 .font(.system(size: 19))
                                 .foregroundStyle(symbol(for: label) == "circle" ? Color.textFaint : Color.accent)
                                 .contentTransition(.symbolEffect(.replace))
-                            Text(label.name).font(.phone(16)).foregroundStyle(Color.textPrimary)
+                            Text(label).font(.phone(16)).foregroundStyle(Color.textPrimary)
                             Spacer(minLength: 0)
                         }
                         .contentShape(.rect)
@@ -72,8 +72,8 @@ struct LabelPicker: View {
 
     private var trimmed: String { query.trimmingCharacters(in: .whitespaces) }
 
-    private var matches: [MailLabel] {
-        trimmed.isEmpty ? labels : labels.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+    private var matches: [String] {
+        trimmed.isEmpty ? labels.names : labels.names.filter { $0.localizedCaseInsensitiveContains(trimmed) }
     }
 
     /// The name to create, when what you typed isn't a label yet.
@@ -83,9 +83,10 @@ struct LabelPicker: View {
     }
 
     /// Filled when every conversation has the label, a dash when only some do.
-    private func symbol(for label: MailLabel) -> String {
+    private func symbol(for name: String) -> String {
         let targets = Set(conversations)
-        let count = assignments.count { $0.labelID == label.id && targets.contains($0.conversationID) }
+        let ids = Set(labels.filter { $0.name == name }.map(\.id))
+        let count = Set(assignments.filter { ids.contains($0.labelID) && targets.contains($0.conversationID) }.map(\.conversationID)).count
         return count == 0 ? "circle" : count == targets.count ? "checkmark.circle.fill" : "minus.circle.fill"
     }
 }

@@ -1,40 +1,32 @@
 import type { LightMyRequestResponse } from "fastify";
 
 import { buildApp } from "../app";
-import { createAuth, setPassword } from "../auth";
+import { createServerSettings } from "../lib/server-settings";
 import { createMemoryStorage } from "../lib/storage";
 import { createTestDb } from "./db";
 import { createFakeResend } from "./fake-resend";
 
-export const OWNER = { email: "siebe@baree.test", password: "correct horse battery" };
-const PUBLIC_URL = "http://api.test";
+export const PUBLIC_URL = "http://api.test";
+export const CLAIM_CODE = "the-claim-code";
 
 export async function buildTestApp() {
     const { db, reset, close } = await createTestDb();
     const resend = createFakeResend();
     const storage = createMemoryStorage();
-    const auth = createAuth({
-        db,
-        baseURL: PUBLIC_URL,
-        secret: "test-secret-test-secret-test-secret",
-        allowedEmails: [OWNER.email],
-    });
     const app = await buildApp({
         db,
-        auth,
+        settings: createServerSettings(db),
         resend: resend.gateway,
         storage,
         trackingSecret: "test-tracking-secret-0123456789abcdef",
         publicUrl: PUBLIC_URL,
+        claimCode: CLAIM_CODE,
     });
     await app.ready();
 
-    /** Gives the owner a password the way the password script does, signs in and returns the app's bearer header. */
-    async function signIn(): Promise<{ authorization: string }> {
-        await setPassword(auth, OWNER.email, OWNER.password);
-        const response = await app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: OWNER });
-        const token = response.headers["set-auth-token"];
-        if (typeof token !== "string") throw new Error(`sign-in failed: ${response.statusCode} ${response.body}`);
+    /** Claims the fresh server the way the app does and returns the bearer header it would send. */
+    async function claim(): Promise<{ authorization: string }> {
+        const { token } = expectStatus(await app.inject({ method: "POST", url: "/claim", payload: {} }), 200);
         return { authorization: `Bearer ${token}` };
     }
 
@@ -70,16 +62,16 @@ export async function buildTestApp() {
 
     return {
         app,
-        auth,
         db,
         resend,
         storage,
-        signIn,
+        claim,
         seedMailbox,
         webhook,
         reset: async () => {
             await reset();
             resend.sent.length = 0;
+            resend.webhooks.length = 0;
             storage.objects.clear();
         },
         close: async () => {

@@ -6,7 +6,7 @@ public enum Mutation: Codable, Hashable, Sendable {
     case setRead(Conversation.ID, Bool)
     case setStarred(Conversation.ID, Bool)
     case move(Conversation.ID, from: Folder, to: Folder)
-    /// Adds or removes one label. Labels live in the api whatever account the conversation is on.
+    /// Adds or removes one label. It goes to whoever owns the label: the Gmail account, or your server.
     case label(Conversation.ID, MailLabel.ID, Bool)
 
     public var conversationID: Conversation.ID {

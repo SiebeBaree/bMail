@@ -20,7 +20,7 @@ export function GET() {
         "- Local first: every change is saved in a database on the Mac and synced in the background, so actions are instant and work offline",
         "- Keyboard: every action has a shortcut, and ⌘K opens a command palette that shows them",
         "- Tracking: optional open and click tracking per message that ignores Apple's privacy proxy, link scanners and your own opens",
-        "- Hosting: there is no shared bMail server; every user deploys a small api to Vercel with Neon, Resend and Cloudflare R2",
+        "- Hosting: there is no shared bMail server or bMail account; Gmail needs no server, and your own domains and tracking run on a small api each user deploys to Vercel with one button",
         `- Made by ${site.author.name}`,
         "",
         "## FAQ",

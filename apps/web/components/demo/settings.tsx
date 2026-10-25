@@ -94,6 +94,10 @@ export function DomainSettings() {
                     Add domain
                 </MailButton>
             </div>
+            <div className="mt-5 flex items-center gap-1">
+                <span className="text-muted">Connected to mail-api.northwind.studio.</span>
+                <MailButton kind="ghost">Disconnect</MailButton>
+            </div>
         </div>
     );
 }

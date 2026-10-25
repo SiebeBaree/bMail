@@ -7,10 +7,12 @@ import SQLiteData
 import SwiftUI
 
 /// Two pages. General: the addresses you read and send from, your labels, the domains behind your own addresses and
-/// agents. Every way to add an address starts from the same button. AI: your key and the features that use it.
+/// agents. Every way to add an address starts from the same button, and your server only shows up once you want your
+/// own domain. AI: your key and the features that use it.
 struct SettingsView: View {
     enum Page: String, CaseIterable { case general = "General", ai = "AI" }
 
+    @Environment(AppModel.self) private var model
     @FocusState private var isDomainFieldFocused: Bool
     @State private var page = Page.general
 
@@ -30,7 +32,9 @@ struct SettingsView: View {
                 case .general:
                     AccountsSection(isDomainFieldFocused: $isDomainFieldFocused)
                     LabelsSection()
-                    DomainsSection(isDomainFieldFocused: $isDomainFieldFocused)
+                    if let server = model.session.server {
+                        DomainsSection(server: server, isDomainFieldFocused: $isDomainFieldFocused)
+                    }
                     AgentsSection()
                 case .ai:
                     AISettingsPage()
@@ -162,6 +166,7 @@ private struct AccountsSection: View {
     @FetchAll(Domain.order(by: \.name)) private var domains
     @State private var isAddOpen = false
     @State private var newAddressDomain: Domain.ID?
+    @State private var isSettingUpServer = false
     @State private var isConnecting = false
     @State private var error: String?
 
@@ -184,7 +189,9 @@ private struct AccountsSection: View {
             ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
                 AccountRow(account: account, number: index + 1, isCatchAll: isCatchAll(account)) { remove(account) }
             }
-            if let domain = domains.first(where: { $0.id == newAddressDomain }) {
+            if isSettingUpServer, model.session.server == nil {
+                ServerSetupRow { isSettingUpServer = false }
+            } else if let domain = domains.first(where: { $0.id == newAddressDomain }) {
                 NewAddressRow(domain: domain, create: { createAddress($0, on: domain) }, cancel: { newAddressDomain = nil })
             } else if accounts.isEmpty {
                 Text("No accounts yet. Add Gmail or an address on your own domain.")
@@ -197,17 +204,17 @@ private struct AccountsSection: View {
     @ViewBuilder private var addOptions: some View {
         if BuildSettings.google != nil {
             option("Gmail", detail: "Sign in with Google", symbol: "envelope", action: connectGmail)
-        }
-        if !domains.isEmpty, BuildSettings.google != nil {
             Hairline().padding(.vertical, 4)
         }
-        ForEach(domains) { domain in
-            option("Address on \(domain.name)", detail: "name@\(domain.name)", symbol: "at") { newAddressDomain = domain.id }
-        }
-        if domains.isEmpty {
+        if model.session.server == nil {
+            option("Address on your own domain", detail: "Sets up your server first", symbol: "at") { isSettingUpServer = true }
+        } else if domains.isEmpty {
             option("Address on your own domain", detail: "Add the domain first, below", symbol: "at") {
                 isDomainFieldFocused.wrappedValue = true
             }
+        }
+        ForEach(domains) { domain in
+            option("Address on \(domain.name)", detail: "name@\(domain.name)", symbol: "at") { newAddressDomain = domain.id }
         }
     }
 
@@ -265,26 +272,41 @@ private struct AccountsSection: View {
     }
 
     private func connectGmail() {
-        guard let client = BuildSettings.google else { return }
         isConnecting = true
         error = nil
         Task {
             defer { isConnecting = false }
             do {
-                let attempt = client.start()
-                let callback = try await webAuthenticationSession.authenticate(
-                    using: attempt.url,
-                    callback: .customScheme(attempt.callbackScheme),
-                    preferredBrowserSession: .ephemeral,
-                    additionalHeaderFields: [:]
-                )
-                try model.session.connectGmail(tokens: try await client.finish(attempt, callback: callback))
-            } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
-                return
+                try await model.connectGmail(using: webAuthenticationSession)
             } catch {
                 self.error = error.localizedDescription
             }
         }
+    }
+}
+
+/// Where your own domain starts when there's no server yet: set one up on Vercel or connect yours.
+private struct ServerSetupRow: View {
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 24) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Your own domain").font(.uiMedium)
+                Text("Your domains and tracking run on a server you host. Free on Vercel, about two minutes.")
+                    .foregroundStyle(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Cancel", action: cancel)
+                    .buttonStyle(.plain)
+                    .font(.geist(12))
+                    .foregroundStyle(Color.link)
+                    .padding(.top, 6)
+            }
+            Spacer(minLength: 0)
+            ServerChoice().frame(width: 300)
+        }
+        .padding(.vertical, 16)
+        .overlay(alignment: .bottom) { Hairline() }
     }
 }
 
@@ -313,7 +335,7 @@ private struct AccountRow: View {
                         .buttonStyle(.ghost)
                     ConfirmButton(
                         title: account.kind == .domain ? "Delete" : "Disconnect",
-                        confirmation: account.kind == .domain ? "Delete with all its mail" : "Disconnect from this Mac",
+                        confirmation: account.kind == .domain ? "Delete with all its mail" : "Disconnect from bMail",
                         action: remove
                     )
                 }
@@ -387,7 +409,8 @@ private struct NewAddressRow: View {
     }
 }
 
-/// Your labels, across every account. They're created where you use them, with L; here they're renamed and removed.
+/// Your labels, across every account, by name. They're created where you use them, with L; here they're renamed and
+/// removed, in Gmail and on your server alike.
 private struct LabelsSection: View {
     @Environment(AppModel.self) private var model
     @FetchAll(MailLabel.order(by: \.name)) private var labels
@@ -399,8 +422,8 @@ private struct LabelsSection: View {
             if let error {
                 Text(error).foregroundStyle(Color.danger).padding(.vertical, 12)
             }
-            ForEach(labels) { label in
-                LabelRow(label: label, rename: { rename(label, to: $0) }, delete: { delete(label) })
+            ForEach(labels.names, id: \.self) { name in
+                LabelRow(label: name, rename: { rename(name, to: $0) }, delete: { delete(name) })
             }
             if labels.isEmpty {
                 HStack(spacing: 6) {
@@ -413,20 +436,18 @@ private struct LabelsSection: View {
         }
     }
 
-    private func rename(_ label: MailLabel, to name: String) {
-        let name = name.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, name != label.name else { return }
-        run { try await model.session.admin.renameLabel(label.id, to: name) }
+    private func rename(_ label: String, to name: String) {
+        run { try await model.session.renameLabel(named: label, to: name) }
     }
 
-    private func delete(_ label: MailLabel) {
-        run { try await model.session.admin.deleteLabel(label.id) }
+    private func delete(_ label: String) {
+        run { try await model.session.deleteLabel(named: label) }
     }
 
-    private func run(_ operation: @escaping () async throws -> ChangeSet) {
+    private func run(_ operation: @escaping () async throws -> Void) {
         Task {
             do {
-                try model.session.store.merge(try await operation(), source: "labels")
+                try await operation()
                 error = nil
             } catch {
                 self.error = error.localizedDescription
@@ -436,7 +457,7 @@ private struct LabelsSection: View {
 }
 
 private struct LabelRow: View {
-    let label: MailLabel
+    let label: String
     let rename: (String) -> Void
     let delete: () -> Void
     @State private var name = ""
@@ -457,7 +478,7 @@ private struct LabelRow: View {
         .overlay(alignment: .bottom) { Hairline() }
         .contentShape(.rect)
         .onHover { isHovered = $0 }
-        .onAppear { name = label.name }
-        .onChange(of: label.name) { _, new in name = new }
+        .onAppear { name = label }
+        .onChange(of: label) { _, new in name = new }
     }
 }

@@ -31,6 +31,10 @@ targets:
       path: App/Resources/Info.plist
       properties:
         GoogleClientID: $(GOOGLE_CLIENT_ID)
+        # bmail://connect?server=… brings you back from Vercel's deploy flow with your new server.
+        CFBundleURLTypes:
+          - CFBundleURLName: be.baree.mail
+            CFBundleURLSchemes: [bmail]
     dependencies:
       - package: MailKit
         product: DesignSystem

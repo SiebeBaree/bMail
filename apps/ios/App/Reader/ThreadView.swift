@@ -51,8 +51,8 @@ struct ThreadView: View {
                 .textSelection(.enabled)
             if !thread.labels.isEmpty {
                 HStack(spacing: 6) {
-                    ForEach(thread.labels) { label in
-                        Text(label.name)
+                    ForEach(thread.labels, id: \.self) { label in
+                        Text(label)
                             .font(.phone(12, .medium, relativeTo: .caption))
                             .foregroundStyle(Color.textSecondary)
                             .padding(.horizontal, 8)

@@ -4,7 +4,7 @@ import MailUI
 import SQLiteData
 import SwiftUI
 
-/// The app once you're signed in: the list, the reader pushed over it, and the sheets for writing, labels and settings.
+/// The app once there's mail to read: the list and the reader pushed over it.
 struct InboxScreen: View {
     @Environment(AppModel.self) private var model
 
@@ -13,13 +13,6 @@ struct InboxScreen: View {
         NavigationStack(path: $model.path) {
             ConversationList()
                 .navigationDestination(for: Conversation.ID.self) { ReaderView(conversationID: $0) }
-        }
-        .sheet(item: $model.sheet, onDismiss: model.sheetDismissed) { sheet in
-            switch sheet {
-            case let .composer(composer): ComposerView(model: composer)
-            case let .labels(ids): LabelPicker(conversations: ids)
-            case .settings: SettingsView()
-            }
         }
     }
 }
@@ -109,7 +102,7 @@ private struct ConversationList: View {
     private var request: ConversationsRequest {
         switch model.mailbox {
         case let .tab(tab): ConversationsRequest(tab: tab, accountID: model.accountFilter, searchIDs: model.searchResults)
-        case let .label(id): ConversationsRequest(tab: .inbox, accountID: model.accountFilter, labelID: id, searchIDs: model.searchResults)
+        case let .label(name): ConversationsRequest(tab: .inbox, accountID: model.accountFilter, label: name, searchIDs: model.searchResults)
         }
     }
 
@@ -383,8 +376,8 @@ private struct MailboxMenu: View {
         if !labels.isEmpty {
             Section("Labels") {
                 Picker("Label", selection: $model.mailbox) {
-                    ForEach(labels) { label in
-                        Label(label.name, systemImage: "tag").tag(Mailbox.label(label.id))
+                    ForEach(labels.names, id: \.self) { name in
+                        Label(name, systemImage: "tag").tag(Mailbox.label(name))
                     }
                 }
             }
@@ -463,7 +456,7 @@ final class ConversationQuery {
     var labelNames: [Conversation.ID: [String]] {
         let names = Dictionary(uniqueKeysWithValues: labels.map { ($0.id, $0.name) })
         return Dictionary(grouping: assignments, by: \.conversationID).mapValues { rows in
-            rows.compactMap { names[$0.labelID] }.sorted()
+            Set(rows.compactMap { names[$0.labelID] }).sorted()
         }
     }
 

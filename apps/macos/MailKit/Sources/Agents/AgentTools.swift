@@ -40,6 +40,8 @@ public struct AgentDraft: Identifiable, Sendable {
 /// that names the agent, so it can be undone like anything you did yourself.
 public enum AgentEffect: Sendable {
     case apply([Mutation], toast: String)
+    /// Puts the label on the conversations, or takes it off when they all have it. Gmail mail gets its Gmail label.
+    case toggleLabel(String, [Conversation.ID], toast: String)
     case send(AgentDraft)
     case review(AgentDraft)
 }
@@ -85,10 +87,9 @@ public struct AgentTools: Sendable {
     // MARK: - Reading
 
     private func listAccounts() throws -> String {
-        let labels = try store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }
         return try json(AccountList(
             accounts: try accounts().map { AccountList.Item(address: $0.address, name: $0.displayName, kind: $0.kind.rawValue, access: access($0.id).rawValue) },
-            labels: labels.map(\.name)
+            labels: try labelNames()
         ))
     }
 
@@ -107,7 +108,8 @@ public struct AgentTools: Sendable {
             var query = Conversation.where { $0.accountID.in(accounts.map(\.id)) }
             if unreadOnly { query = query.where { !$0.isRead } }
             if let label {
-                let tagged = try ConversationLabel.where { $0.labelID.eq(label.id) }.select(\.conversationID).fetchAll(db)
+                let tagged = try ConversationLabel.where { $0.labelID.in(MailLabel.where { $0.name.eq(label) }.select(\.id)) }
+                    .select(\.conversationID).fetchAll(db)
                 query = query.where { $0.id.in(tagged) }
             }
             // The same views as the app's tabs. Without a query the inbox is the default; a query searches everywhere.
@@ -153,7 +155,7 @@ public struct AgentTools: Sendable {
         }
         return try json(ThreadItem(
             id: conversation.id, account: account.address, subject: conversation.subject,
-            folder: conversation.folder.rawValue, starred: conversation.isStarred, labels: thread.labels.map(\.name),
+            folder: conversation.folder.rawValue, starred: conversation.isStarred, labels: thread.labels,
             messages: thread.messages.map { message in
                 MessageItem(
                     id: message.id, from: message.from.formatted, to: message.to.map(\.formatted), cc: message.cc.map(\.formatted),
@@ -179,7 +181,8 @@ public struct AgentTools: Sendable {
         let conversations = try organizable(ids)
         let label = try [.label, .unlabel].contains(action) ? self.label(named: try arguments.string("label").orThrow("Say which label.")) : nil
 
-        let mutations: [Mutation]
+        var mutations: [Mutation] = []
+        var labeling: [Conversation.ID] = []
         switch action {
         case .done, .inbox, .trash, .spam:
             let folder: Folder = switch action {
@@ -196,13 +199,15 @@ public struct AgentTools: Sendable {
         case .label, .unlabel:
             guard let label else { throw AgentError("Say which label.") }
             let labeled = Set(try store.database.read { db in
-                try ConversationLabel.where { $0.labelID.eq(label.id) && $0.conversationID.in(ids) }.select(\.conversationID).fetchAll(db)
+                try ConversationLabel.where { $0.labelID.in(MailLabel.where { $0.name.eq(label) }.select(\.id)) && $0.conversationID.in(ids) }
+                    .select(\.conversationID).fetchAll(db)
             })
-            mutations = conversations.filter { labeled.contains($0.id) != (action == .label) }.map { .label($0.id, label.id, action == .label) }
+            labeling = conversations.filter { labeled.contains($0.id) != (action == .label) }.map(\.id)
         }
-        guard !mutations.isEmpty else { return ("Nothing to change, they already are.", nil) }
+        let changed = max(mutations.count, labeling.count)
+        guard changed > 0 else { return ("Nothing to change, they already are.", nil) }
 
-        let count = mutations.count == 1 ? "1 conversation" : "\(mutations.count) conversations"
+        let count = changed == 1 ? "1 conversation" : "\(changed) conversations"
         let done = switch action {
         case .done: "marked \(count) done"
         case .inbox: "moved \(count) to the inbox"
@@ -212,10 +217,15 @@ public struct AgentTools: Sendable {
         case .unstar: "unstarred \(count)"
         case .read: "marked \(count) read"
         case .unread: "marked \(count) unread"
-        case .label: "labeled \(count) \(label?.name ?? "")"
-        case .unlabel: "took \(label?.name ?? "") off \(count)"
+        case .label: "labeled \(count) \(label ?? "")"
+        case .unlabel: "took \(label ?? "") off \(count)"
         }
-        return ("\(done.prefix(1).uppercased())\(done.dropFirst()). The user can undo it in bMail.", .apply(mutations, toast: "\(agent) \(done)"))
+        let effect: AgentEffect = if let label, !labeling.isEmpty {
+            .toggleLabel(label, labeling, toast: "\(agent) \(done)")
+        } else {
+            .apply(mutations, toast: "\(agent) \(done)")
+        }
+        return ("\(done.prefix(1).uppercased())\(done.dropFirst()). The user can undo it in bMail.", effect)
     }
 
     /// The conversations behind `ids`, as long as every one is on an account at Organize or above.
@@ -315,10 +325,16 @@ public struct AgentTools: Sendable {
         return [try visible.first { $0.address.caseInsensitiveCompare(address) == .orderedSame }.orThrow("There's no account \(address).")]
     }
 
-    private func label(named name: String) throws -> MailLabel {
-        let labels = try store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }
-        return try labels.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }
-            .orThrow("There's no label called \(name). The labels are: \(labels.map(\.name).joined(separator: ", ")).")
+    /// The name of the label the agent meant, as it's spelled in bMail.
+    private func label(named name: String) throws -> String {
+        let names = try labelNames()
+        return try names.first { $0.caseInsensitiveCompare(name) == .orderedSame }
+            .orThrow("There's no label called \(name). The labels are: \(names.joined(separator: ", ")).")
+    }
+
+    /// Every label once, though Gmail accounts and your server can each have one by the same name.
+    private func labelNames() throws -> [String] {
+        try store.database.read { db in try MailLabel.select(\.name).distinct().order(by: \.name).fetchAll(db) }
     }
 
     private func labelNames(of ids: [Conversation.ID]) throws -> [Conversation.ID: [String]] {

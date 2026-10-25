@@ -65,8 +65,8 @@ struct ConversationView: View {
                 Image(systemName: "envelope").font(.system(size: 11)).foregroundStyle(Color.textMuted)
                 Text(account.address).font(.meta).foregroundStyle(Color.textMuted)
             }
-            ForEach(thread.labels) { label in
-                Text(label.name).font(.geist(12)).foregroundStyle(Color.textSecondary).padding(.leading, 10)
+            ForEach(thread.labels, id: \.self) { label in
+                Text(label).font(.geist(12)).foregroundStyle(Color.textSecondary).padding(.leading, 10)
             }
             Spacer()
             if let conversation = thread.conversation, thread.messages.contains(where: { $0.direction == .inbound && $0.unsubscribe != nil }) {

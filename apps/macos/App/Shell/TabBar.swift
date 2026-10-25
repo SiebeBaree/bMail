@@ -22,9 +22,9 @@ struct TabBar: View {
             }
             if !labels.isEmpty {
                 Rectangle().fill(Color.lineStrong).frame(width: 1, height: 14).padding(.bottom, 14)
-                ForEach(labels) { label in
-                    TabButton(title: label.name, count: nil, help: "Label", isSelected: model.labelFilter == label.id && model.searchResults == nil) {
-                        model.labelFilter = label.id
+                ForEach(labels.names, id: \.self) { name in
+                    TabButton(title: name, count: nil, help: "Label", isSelected: model.labelFilter == name && model.searchResults == nil) {
+                        model.labelFilter = name
                     }
                 }
             }

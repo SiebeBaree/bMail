@@ -13,7 +13,7 @@ afterAll(() => harness.close());
 beforeEach(async () => {
     vi.useRealTimers();
     await harness.reset();
-    headers = await harness.signIn();
+    headers = await harness.claim();
 });
 
 const html = '<p>Here is <a href="https://baree.be/proposal">the proposal</a>.</p>';

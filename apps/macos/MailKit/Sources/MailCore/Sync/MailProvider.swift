@@ -9,7 +9,7 @@ public protocol MailProvider: Sendable {
     /// Whether mutations and sends for this account go through this provider.
     func owns(_ account: Account) -> Bool
 
-    /// Whether label changes go through this provider, whichever account the conversation is on.
+    /// Whether this provider keeps the labels that belong to no account, which are your server's.
     var keepsLabels: Bool { get }
 
     /// Everything that changed after `cursor`, which is nil on first sync. The engine calls again with the returned
@@ -40,8 +40,11 @@ public struct ChangeSet: Sendable {
     public var events: [MessageEvent] = []
     public var labels: [MailLabel] = []
     public var removedLabelIDs: [MailLabel.ID] = []
-    /// The whole set per conversation; an empty set clears it.
+    /// The whole set of this provider's labels per conversation; an empty set clears them. Labels that belong to someone
+    /// else stay, which is what lets a server label from before Gmail labels sit next to a Gmail one.
     public var conversationLabels: [Conversation.ID: Set<MailLabel.ID>] = [:]
+    /// Whose labels `conversationLabels` replaces: a Gmail account's, or nil for your server's.
+    public var labelAccountID: Account.ID?
     public var trackedSends: [TrackedSend] = []
     public var cursor: String?
     public var hasMore = false

@@ -5,7 +5,7 @@ import { toFetchHeaders } from "../../lib/headers";
 import { inboundService } from "../messages";
 import { deliveryService, isDeliveryEvent } from "../tracking/delivery.service";
 
-/** One endpoint for every Resend webhook. Configure it in Resend for email.received and the delivery events. */
+/** One endpoint for every Resend webhook. The server creates the webhook itself when bMail saves the Resend key. */
 export const webhooksModule: FastifyPluginAsync = async (app) => {
     const inbound = inboundService({ db: app.db, resend: app.resend, storage: app.storage, log: app.log });
     const delivery = deliveryService(app.db);
@@ -16,7 +16,7 @@ export const webhooksModule: FastifyPluginAsync = async (app) => {
     app.post("/webhooks/resend", { schema: { hide: true } }, async (request, reply) => {
         let event: WebhookEventPayload;
         try {
-            event = app.resend.verifyWebhook(String(request.body), toFetchHeaders(request.headers));
+            event = await app.resend.verifyWebhook(String(request.body), toFetchHeaders(request.headers));
         } catch {
             return reply.status(400).send({ message: "Invalid signature.", requestId: request.id });
         }

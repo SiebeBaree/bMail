@@ -137,12 +137,24 @@ public actor TokenStore {
     private var refreshing: Task<OAuthTokens, any Error>?
 
     public init(accountID: Account.ID, client: OAuthClient) {
-        self.key = "oauth.\(accountID.uuidString)"
+        self.key = Self.keyPrefix + accountID.uuidString
         self.client = client
     }
 
+    /// The Keychain key prefix every account's tokens share. The rest of the key is the account id.
+    public static let keyPrefix = "oauth."
+
+    /// Synced, so the account shows up on your other devices too.
     public static func save(_ tokens: OAuthTokens, for accountID: Account.ID) throws {
-        Keychain.write(String(decoding: try JSONEncoder().encode(tokens), as: UTF8.self), for: "oauth.\(accountID.uuidString)")
+        Keychain.write(String(decoding: try JSONEncoder().encode(tokens), as: UTF8.self), for: keyPrefix + accountID.uuidString, synced: true)
+    }
+
+    public static func load(for accountID: Account.ID) -> OAuthTokens? {
+        Keychain.read(keyPrefix + accountID.uuidString).flatMap { try? JSONDecoder().decode(OAuthTokens.self, from: Data($0.utf8)) }
+    }
+
+    public static func forget(_ accountID: Account.ID) {
+        Keychain.delete(keyPrefix + accountID.uuidString)
     }
 
     public func accessToken() async throws -> String {
@@ -155,7 +167,7 @@ public actor TokenStore {
         refreshing = task
         defer { refreshing = nil }
         let fresh = try await task.value
-        Keychain.write(String(decoding: try JSONEncoder().encode(fresh), as: UTF8.self), for: key)
+        Keychain.write(String(decoding: try JSONEncoder().encode(fresh), as: UTF8.self), for: key, synced: true)
         return fresh.accessToken
     }
 }

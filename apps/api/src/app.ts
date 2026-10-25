@@ -14,18 +14,19 @@ import {
     type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 
-import type { Auth } from "./auth";
-import { ConflictError, NotFoundError, UpstreamError } from "./lib/errors";
+import { BadRequestError, ConflictError, NotFoundError, UpstreamError } from "./lib/errors";
 import type { ResendGateway } from "./lib/resend";
+import type { ServerSettings } from "./lib/server-settings";
 import type { Storage } from "./lib/storage";
 import { createTrackingTokens, type TrackingTokens } from "./lib/tracking-token";
-import { authModule } from "./modules/auth";
 import { conversationsRoutes } from "./modules/conversations";
 import { domainsRoutes } from "./modules/domains";
 import { healthModule } from "./modules/health";
 import { labelsRoutes } from "./modules/labels";
 import { mailboxesRoutes } from "./modules/mailboxes";
 import { messagesRoutes } from "./modules/messages";
+import { ownerRoutes, ownerService, type OwnerService } from "./modules/owner";
+import { serverRoutes } from "./modules/server";
 import { syncRoutes } from "./modules/sync";
 import { trackedMessagesRoutes, trackingRoutes } from "./modules/tracking";
 import { webhooksModule } from "./modules/webhooks";
@@ -37,7 +38,8 @@ import { securityPlugin } from "./plugins/security";
 declare module "fastify" {
     interface FastifyInstance {
         db: Database;
-        auth: Auth;
+        owner: OwnerService;
+        settings: ServerSettings;
         resend: ResendGateway;
         storage: Storage;
         trackingTokens: TrackingTokens;
@@ -48,15 +50,26 @@ declare module "fastify" {
 
 export type AppOptions = {
     db: Database;
-    auth: Auth;
+    settings: ServerSettings;
     resend: ResendGateway;
     storage: Storage;
     trackingSecret: string;
     publicUrl: string;
+    /** The host's CLAIM_CODE. Unset, a claimed server can't be claimed again. */
+    claimCode?: string;
     logger?: Logger;
 };
 
-export async function buildApp({ db, auth, resend, storage, trackingSecret, publicUrl, logger }: AppOptions) {
+export async function buildApp({
+    db,
+    settings,
+    resend,
+    storage,
+    trackingSecret,
+    publicUrl,
+    claimCode,
+    logger,
+}: AppOptions) {
     const app = fastify({
         ...(logger ? { loggerInstance: logger } : { logger: false }),
         // The observability plugin logs one canonical line per request instead.
@@ -70,7 +83,8 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
     app.setSerializerCompiler(serializerCompiler);
 
     app.decorate("db", db);
-    app.decorate("auth", auth);
+    app.decorate("owner", ownerService(db, claimCode));
+    app.decorate("settings", settings);
     app.decorate("resend", resend);
     app.decorate("storage", storage);
     app.decorate("trackingTokens", createTrackingTokens(trackingSecret));
@@ -78,7 +92,7 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
     app.decorateRequest("userId", "");
 
     // The document the Swift client is generated from. 3.0 rather than 3.1: swift-openapi-generator reads nullable
-    // fields best in that dialect. Routes marked `hide` (auth, webhooks, opens and clicks) aren't part of it.
+    // fields best in that dialect. Routes marked `hide` (webhooks, opens and clicks) aren't part of it.
     await app.register(swagger, {
         openapi: {
             openapi: "3.0.3",
@@ -109,6 +123,7 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
                 })),
             });
         }
+        if (error instanceof BadRequestError) return reply.status(400).send({ message: error.message, requestId });
         if (error instanceof NotFoundError) return reply.status(404).send({ message: error.message, requestId });
         if (error instanceof ConflictError) return reply.status(409).send({ message: error.message, requestId });
         if (error instanceof UpstreamError) {
@@ -121,15 +136,16 @@ export async function buildApp({ db, auth, resend, storage, trackingSecret, publ
         return reply.status(500).send({ message: "Something went wrong. Please try again.", requestId });
     });
 
-    // Public: health checks, sign-in, Resend's webhooks and recipients' mail apps.
+    // Public: health checks, claiming a fresh server, Resend's webhooks and recipients' mail apps.
     await app.register(healthModule);
-    await app.register(authModule);
+    await app.register(ownerRoutes);
     await app.register(webhooksModule);
     await app.register(trackingRoutes);
 
-    // Private: everything else needs a session.
+    // Private: everything else needs the owner token.
     await app.register(async (scope) => {
         scope.addHook("onRequest", authenticate);
+        await scope.register(serverRoutes);
         await scope.register(syncRoutes);
         await scope.register(domainsRoutes);
         await scope.register(mailboxesRoutes);

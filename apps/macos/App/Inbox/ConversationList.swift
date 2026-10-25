@@ -11,7 +11,7 @@ struct ConversationList: View {
     @State private var query = ConversationQuery()
 
     var body: some View {
-        let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, labelID: model.labelFilter, searchIDs: model.searchResults)
+        let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, label: model.labelFilter, searchIDs: model.searchResults)
         let labelNames = query.labelNames
         let tags = model.accountFilter == nil ? query.tags : [:]
         ScrollViewReader { proxy in
@@ -84,7 +84,7 @@ final class ConversationQuery {
     var labelNames: [Conversation.ID: [String]] {
         let names = Dictionary(uniqueKeysWithValues: labels.map { ($0.id, $0.name) })
         return Dictionary(grouping: assignments, by: \.conversationID).mapValues { rows in
-            rows.compactMap { names[$0.labelID] }.sorted()
+            Set(rows.compactMap { names[$0.labelID] }).sorted()
         }
     }
 

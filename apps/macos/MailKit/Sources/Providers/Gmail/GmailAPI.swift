@@ -15,6 +15,14 @@ struct GmailAPI: Sendable {
         try await send(path, method: "POST", query: [:], body: body)
     }
 
+    func patch<Response: Decodable>(_ path: String, body: some Encodable) async throws -> Response {
+        try await send(path, method: "PATCH", query: [:], body: body)
+    }
+
+    func delete(_ path: String) async throws {
+        let _: Empty = try await send(path, method: "DELETE", query: [:], body: Optional<Empty>.none)
+    }
+
     struct Empty: Codable {}
 
     private func send<Response: Decodable>(_ path: String, method: String, query: [String: String], body: (some Encodable)?) async throws -> Response {
@@ -40,7 +48,10 @@ struct GmailAPI: Sendable {
                 throw ProviderError(.unavailable, "Can't reach Gmail.")
             }
             switch response.statusCode {
-            case 200..<300: return try JSONDecoder().decode(Response.self, from: data)
+            case 200..<300:
+                // A delete answers with no body at all.
+                if data.isEmpty, let empty = Empty() as? Response { return empty }
+                return try JSONDecoder().decode(Response.self, from: data)
             case 401: throw ProviderError(.unauthorized, "Gmail needs you to sign in again.")
             case 404: throw GmailNotFound()
             case 403 where !Self.isRateLimit(data), 400:
@@ -154,6 +165,17 @@ enum Gmail {
         var history: [Entry]?
         var historyId: String
         var nextPageToken: String?
+    }
+
+    struct LabelList: Decodable {
+        var labels: [Label]?
+    }
+
+    struct Label: Decodable {
+        var id: String
+        var name: String
+        /// `system` for INBOX, UNREAD and the rest Gmail made; `user` for yours.
+        var type: String?
     }
 
     struct Sent: Decodable {

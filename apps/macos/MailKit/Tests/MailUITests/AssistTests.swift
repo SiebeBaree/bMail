@@ -47,13 +47,15 @@ import Testing
 @Suite @MainActor struct LabellerTests {
     let store: MailStore
     let account = Account(id: UUID(), kind: .domain, address: "siebe@baree.be", displayName: "Siebe", domainID: nil, position: 0)
-    let receipts = MailLabel(id: UUID(), name: "Receipts", description: "Invoices and order confirmations")
+    let gmail = Account(id: UUID(), kind: .gmail, address: "siebe@gmail.com", displayName: "Siebe", domainID: nil, position: 1)
+    let receipts = MailLabel(id: UUID(), name: "Receipts")
     let travel = MailLabel(id: UUID(), name: "Travel")
+    let descriptions = ["Receipts": "Invoices and order confirmations"]
 
     init() throws {
         store = MailStore(database: try inMemoryDatabase())
         var changes = ChangeSet()
-        changes.accounts = [account]
+        changes.accounts = [account, gmail]
         changes.labels = [receipts, travel]
         try store.merge(changes, source: "server")
     }
@@ -70,16 +72,22 @@ import Testing
         #expect(try Labeller.candidates(since: since, in: store).isEmpty)
     }
 
-    @Test func learnsFromLabelsYouAddAndOnesYouTakeOff() throws {
-        _ = try add("Invoice 2026-114", labels: [receipts.id])
+    @Test func learnsFromLabelsYouAddAndOnesYouTakeOffUnderTheSameNameAnywhere() throws {
+        let gmailReceipts = MailLabel(id: UUID(), name: "Receipts", accountID: gmail.id, remoteID: "Label_1")
+        var changes = ChangeSet()
+        changes.labels = [gmailReceipts]
+        try store.merge(changes, source: "gmail")
+        let invoice = try add("Invoice 2026-114")
+        try store.perform([.label(invoice, gmailReceipts.id, true)])
         let wrong = try add("Your trial ends in 3 days")
         try store.recordLabelDecision([receipts.id], on: wrong)
         let right = try add("Order confirmed")
         try store.recordLabelDecision([receipts.id], on: right)
         try store.perform([.label(wrong, receipts.id, false)])
 
-        let guides = try Labeller.guides(in: store)
-        #expect(guides.map(\.label.name) == ["Receipts"])
+        let guides = try Labeller.guides(describedAs: descriptions, in: store)
+        #expect(guides.map(\.name) == ["Receipts"])
+        #expect(guides[0].description == "Invoices and order confirmations")
         #expect(guides[0].examples.map(\.subject) == ["Invoice 2026-114"])
         #expect(guides[0].corrections.map(\.subject) == ["Your trial ends in 3 days"])
     }

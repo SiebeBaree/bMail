@@ -25,12 +25,12 @@ const nodes: Node[] = [
     { x: 236, y: 252, width: 172, title: "Your api", detail: "Vercel or any host", strong: true },
     { x: 476, y: 168, width: 164, title: "Resend", detail: "Sends and receives" },
     { x: 476, y: 252, width: 164, title: "Neon", detail: "Postgres" },
-    { x: 476, y: 336, width: 164, title: "Cloudflare R2", detail: "Attachments" },
+    { x: 476, y: 336, width: 164, title: "Blob or R2", detail: "Attachments" },
 ];
 
 const HEIGHT = 56;
 const mid = (node: Node | undefined) => (node ? node.y + HEIGHT / 2 : 0);
-const [mac, gmail, api, resend, neon, r2] = nodes;
+const [mac, gmail, api, resend, neon, storage] = nodes;
 
 /** Every line is a real connection: the app talks to Gmail and your api; only the api talks to the services. */
 const links: { d: string; dashed?: boolean; label?: { x: number; y: number; text: string } }[] = [
@@ -38,11 +38,11 @@ const links: { d: string; dashed?: boolean; label?: { x: number; y: number; text
     { d: `M168 ${mid(mac)} C 202 ${mid(mac)}, 202 ${mid(api)}, 236 ${mid(api)}` },
     { d: `M408 ${mid(api)} C 442 ${mid(api)}, 442 ${mid(resend)}, 476 ${mid(resend)}` },
     { d: `M408 ${mid(api)} L 476 ${mid(neon)}` },
-    { d: `M408 ${mid(api)} C 442 ${mid(api)}, 442 ${mid(r2)}, 476 ${mid(r2)}` },
+    { d: `M408 ${mid(api)} C 442 ${mid(api)}, 442 ${mid(storage)}, 476 ${mid(storage)}` },
     {
-        d: `M84 ${(mac?.y ?? 0) + HEIGHT} V ${mid(r2) + 40} H 558 V ${(r2?.y ?? 0) + HEIGHT}`,
+        d: `M84 ${(mac?.y ?? 0) + HEIGHT} V ${mid(storage) + 40} H 558 V ${(storage?.y ?? 0) + HEIGHT}`,
         dashed: true,
-        label: { x: 96, y: mid(r2) + 32, text: "attachments upload straight to R2" },
+        label: { x: 96, y: mid(storage) + 32, text: "attachments upload straight to storage" },
     },
 ];
 

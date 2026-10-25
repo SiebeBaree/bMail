@@ -136,12 +136,12 @@ import Testing
 }
 
 @Suite struct LabelPromptTests {
-    let receipts = LabelGuide(label: MailLabel(id: UUID(), name: "Receipts", description: "Invoices"), examples: [], corrections: [])
-    let investors = LabelGuide(label: MailLabel(id: UUID(), name: "Investors", description: "From investors"), examples: [], corrections: [])
+    let receipts = LabelGuide(name: "Receipts", description: "Invoices", examples: [], corrections: [])
+    let investors = LabelGuide(name: "Investors", description: "From investors", examples: [], corrections: [])
 
     @Test func picksOnlyLabelsThatExist() {
         let answer = "- receipts\n\"Investors\"\nSpam"
-        #expect(LabelPrompt.labels(in: answer, from: [receipts, investors]) == [receipts.label.id, investors.label.id])
+        #expect(LabelPrompt.labels(in: answer, from: [receipts, investors]) == ["Receipts", "Investors"])
         #expect(LabelPrompt.labels(in: "NONE", from: [receipts, investors]).isEmpty)
     }
 

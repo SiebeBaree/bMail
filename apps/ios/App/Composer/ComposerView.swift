@@ -137,8 +137,7 @@ struct ComposerView: View {
         }
         .accessibilityLabel("Attach")
         Button {
-            model.trackingEnabled.toggle()
-            Haptics.tap()
+            model.toggleTracking()
         } label: {
             Image(systemName: "waveform.path.ecg")
                 .foregroundStyle(model.trackingEnabled ? Color.accent : Color.textPrimary)

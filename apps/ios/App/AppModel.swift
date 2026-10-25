@@ -1,14 +1,16 @@
+import AuthenticationServices
 import DesignSystem
 import MailCore
 import MailUI
 import Observation
 import SQLiteData
+import SwiftUI
 import UIKit
 
-/// What the list shows: one of the views, or a label's conversations.
+/// What the list shows: one of the views, or a label's conversations, by name.
 enum Mailbox: Hashable {
     case tab(MailTab)
-    case label(MailLabel.ID)
+    case label(String)
 }
 
 /// The app's state and the actions views call. What changes mail lives in the session, which the Mac app shares; this
@@ -22,12 +24,15 @@ final class AppModel {
         case composer(ComposerModel)
         case labels([Conversation.ID])
         case settings
+        /// Asks before connecting to a server, from a `bmail://connect` link or a typed address.
+        case connectServer(URL)
 
         var id: String {
             switch self {
             case let .composer(composer): "composer.\(composer.id)"
             case let .labels(ids): "labels.\(ids)"
             case .settings: "settings"
+            case let .connectServer(url): "server.\(url)"
             }
         }
     }
@@ -67,15 +72,39 @@ final class AppModel {
         }
     }
 
-    /// Signing out forgets this iPhone's mail and leaves the reader and every sheet.
-    func signOut() async {
-        path = []
-        sheet = nil
-        waitingToReopen = nil
-        mailbox = .tab(.inbox)
-        accountFilter = nil
-        searchText = ""
-        await session.signOut()
+    // MARK: - Accounts
+
+    /// Google's sign-in in a browser sheet, then the account. Cancelling isn't an error.
+    func connectGmail(using webAuthenticationSession: WebAuthenticationSession) async throws {
+        guard let client = session.google else { return }
+        let attempt = client.start()
+        do {
+            let callback = try await webAuthenticationSession.authenticate(
+                using: attempt.url,
+                callback: .customScheme(attempt.callbackScheme),
+                preferredBrowserSession: .ephemeral,
+                additionalHeaderFields: [:]
+            )
+            try session.connectGmail(tokens: try await client.finish(attempt, callback: callback))
+            Haptics.success()
+        } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
+            return
+        }
+    }
+
+    /// Asks before connecting to the server at `url`, unless it's the one already connected.
+    func connect(to url: URL) {
+        if session.server?.baseURL == url {
+            session.toasts.show(Toast("Already connected to \(url.host() ?? url.absoluteString)", symbol: "checkmark"))
+        } else {
+            sheet = .connectServer(url)
+        }
+    }
+
+    /// Links bMail opens: `bmail://connect?server=…`, which Vercel's deploy flow sends you back with.
+    func handle(_ link: URL) {
+        guard let server = ServerSetup.server(in: link) else { return }
+        connect(to: server)
     }
 
     // MARK: - Triage
@@ -136,14 +165,8 @@ final class AppModel {
         if searchResults != nil { return "Search" }
         switch mailbox {
         case let .tab(tab): return tab.title
-        case let .label(id): return session.label(id)?.name ?? "Label"
+        case let .label(name): return name
         }
-    }
-}
-
-extension MailSession {
-    func label(_ id: MailLabel.ID) -> MailLabel? {
-        try? store.database.read { db in try MailLabel.find(id).fetchOne(db) }
     }
 }
 
