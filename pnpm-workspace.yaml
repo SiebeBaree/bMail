@@ -4,7 +4,7 @@ packages:
 catalog:
     typescript: ^7.0.2
     vitest: ^5.0.3
-    zod: ^4.6.5
+    zod: ^4.6.6
     drizzle-orm: ^0.45.3
 allowBuilds:
     esbuild: true
