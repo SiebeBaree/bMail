@@ -2,88 +2,45 @@
 
 A native mail client for Mac and iPhone, for Gmail and your own domains. Every view reads a local cache and every action lands there first, so nothing waits on the network.
 
-Gmail syncs straight from the app. Your own domains go through a small api that you host yourself. It sends and receives through [Resend](https://resend.com), keeps mail in Postgres on [Neon](https://neon.tech), stores attachments in [Cloudflare R2](https://developers.cloudflare.com/r2/) and serves open and click tracking. There is no shared bMail server. The app asks for your api's address when you sign in.
+Gmail syncs straight from the app, and there's no bMail account. Your own domains and open tracking go through a small api that you host yourself. It sends and receives through [Resend](https://resend.com) and serves open and click tracking. Mail lives in Postgres on [Neon](https://neon.tech), attachments in a Vercel Blob store or [Cloudflare R2](https://developers.cloudflare.com/r2/). There is no shared bMail server.
+
+## Install bMail
+
+Download the DMG from the [latest release](https://github.com/SiebeBaree/bMail/releases/latest) and drag bMail into Applications. Open it and pick Gmail to sign in with Google. That's all Gmail needs.
 
 ## Host your api
 
-You need accounts at Neon, Resend, Cloudflare and [Vercel](https://vercel.com). Their free plans are enough to start. You also need a domain you can add DNS records to and Node 24 with pnpm on your Mac for the one-time setup. The api has nothing Vercel-specific in it, so any host that runs Node 24 works too.
+You only need it for addresses on your own domains and for tracking. You need a [Vercel](https://vercel.com) account and, once you add a domain, a Resend account. Their free plans are enough.
 
-### 1. Clone and install
+### 1. Deploy
 
-```sh
-git clone https://github.com/SiebeBaree/bMail.git
-cd bMail
-pnpm install
-```
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FSiebeBaree%2FbMail&root-directory=apps%2Fapi&project-name=bmail&repository-name=bmail&stores=%5B%7B%22type%22%3A%22integration%22%2C%22integrationSlug%22%3A%22neon%22%2C%22productSlug%22%3A%22neon%22%2C%22protocol%22%3A%22storage%22%7D%2C%7B%22type%22%3A%22blob%22%2C%22access%22%3A%22private%22%7D%5D&redirect-url=https%3A%2F%2Fgetbmail.si%2Fconnect)
 
-### 2. Pick the api's address
+Vercel copies this repository to your GitHub, adds a Neon database and a private Blob store, then deploys `apps/api`. The build migrates the database. There are no environment variables to fill in.
 
-Choose a subdomain for the api, like `mail-api.example.com`. You add it to Vercel in step 6. Use a custom domain, not the `vercel.app` one. Vercel's deployment protection blocks its own domains for anyone outside your team, Resend and the app included.
+When the deploy finishes, Vercel sends you back to bMail, which asks once before it connects. The first bMail to connect to a new server owns it, and your other devices get the connection through iCloud Keychain. To connect a server deployed earlier, add an address on your own domain in bMail, pick Connect existing and enter the server's address.
 
-### 3. Create the database
+The project's `vercel.app` address works for everything. To give the api your own address, add it under the project's domains on Vercel.
 
-Create a Neon project, copy its connection string and run the migrations against it:
+### 2. Add your domain
 
-```sh
-export DATABASE_URL="postgresql://...neon.tech/neondb?sslmode=require"
-export ALLOWED_EMAILS="you@example.com"
-pnpm db:migrate
-```
+In Settings, add an address on your own domain. The first time, bMail asks for a Resend [API key](https://resend.com/api-keys) with full access. Your server checks it, creates the Resend webhook it needs and keeps both in its database.
 
-### 4. Create your account
+bMail then lists the DNS records your domain needs: Resend's records for sending and receiving, a DMARC record and a `t` CNAME for tracking. Add `t.example.com` to the Vercel project's domains as well, or tracked mail keeps using the api's own address.
 
-```sh
-pnpm --filter api password you@example.com
-```
+### Hosting somewhere else
 
-This prints a password. Put it in your password manager. Running it again replaces the password and signs out every device that was signed in, which is also how you recover a lost one.
+Nothing in the api needs Vercel. Any host that runs Node 24 works: set `DATABASE_URL`, run `pnpm db:migrate` once per release and set the four `R2_` variables for attachments. [`apps/api/.env.example`](apps/api/.env.example) lists every variable.
 
-Skip this step if you'll only sign in with Apple.
+### Upgrading a server from before claiming
 
-### 5. Set up Resend and R2
-
-In Resend:
-
-1. Create an API key with full access. The api adds and verifies your domains with it.
-2. Add a webhook for `https://mail-api.example.com/webhooks/resend` with the events `email.received`, `email.sent`, `email.delivered`, `email.delivery_delayed`, `email.bounced`, `email.complained` and `email.failed`. Copy its signing secret.
-
-In Cloudflare, create an R2 bucket and an R2 API token with Object Read & Write on that bucket. Note the account id, the access key id and the secret access key.
-
-### 6. Deploy to Vercel
-
-Import the repository into Vercel with the root directory set to `apps/api`. Vercel picks the Fastify preset. Add these environment variables before the first deploy:
-
-| Variable                                                                 | Value                                                 |
-| ------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `DATABASE_URL`                                                           | The Neon connection string from step 3                |
-| `ALLOWED_EMAILS`                                                         | Your email. Separate several with commas              |
-| `PUBLIC_URL`                                                             | `https://mail-api.example.com`                        |
-| `BETTER_AUTH_SECRET`                                                     | Output of `openssl rand -base64 32`                   |
-| `TRACKING_SECRET`                                                        | Another `openssl rand -base64 32`                     |
-| `RESEND_API_KEY`                                                         | `re_...` from step 5                                  |
-| `RESEND_WEBHOOK_SECRET`                                                  | `whsec_...` from step 5                               |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | From step 5                                           |
-| `APPLE_BUNDLE_ID`                                                        | Optional. `be.baree.mail` turns on Sign in with Apple |
-| `SENTRY_DSN`                                                             | Optional                                              |
-
-Then add `mail-api.example.com` under the project's domains and point its DNS where Vercel tells you. `https://mail-api.example.com/health` should answer once it's live.
-
-### 7. Install bMail and sign in
-
-Download the DMG from the [latest release](https://github.com/SiebeBaree/bMail/releases/latest) and drag bMail into Applications. Open it, enter `mail-api.example.com` as your server and sign in with the password from step 4, or with Apple.
-
-### 8. Add your domain
-
-In Settings, add your domain. bMail lists the DNS records it needs: Resend's records for sending and receiving, a DMARC record and a `t` CNAME for tracking. Add `t.example.com` to the Vercel project's domains as well, or tracked mail keeps using the api's own address.
+The next deploy migrates the database, and every device that was signed in stays signed in. `ALLOWED_EMAILS`, `BETTER_AUTH_SECRET` and `APPLE_BUNDLE_ID` can go. `TRACKING_SECRET` and the Resend variables keep working, so mail you already sent stays tracked.
 
 ## Who can use your api
 
-Only the emails in `ALLOWED_EMAILS` can have an account, and nobody can sign up with a password. An account comes from one of two places:
+Nobody signs up. The first bMail to connect to a new server owns it, and every request after that needs the token it got. bMail keeps that token in iCloud Keychain, so your Mac and iPhone share it.
 
-- Apple, which has verified that you own the email.
-- `pnpm --filter api password`, which needs your database's connection string.
-
-Anyone else who finds your api gets nowhere, even if they know your email.
+If you lose every device, or someone claimed your server before you did, add a `CLAIM_CODE` environment variable with a long value to the Vercel project and redeploy. Connecting with that code makes you the owner again and signs out every other device. Your mail stays where it is.
 
 ## Build it yourself
 

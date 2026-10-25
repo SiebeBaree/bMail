@@ -51,16 +51,16 @@ public enum MailTab: String, CaseIterable, Identifiable, Sendable {
 public struct ConversationsRequest: FetchKeyRequest {
     public var tab: MailTab
     public var accountID: Account.ID?
-    /// When set, the label's conversations instead of the tab, outside spam and trash.
-    public var labelID: MailLabel.ID?
+    /// When set, the conversations with a label by this name instead of the tab, outside spam and trash.
+    public var label: String?
     /// When set, the search results in rank order instead of the tab.
     public var searchIDs: [Conversation.ID]?
     public var limit = 500
 
-    public init(tab: MailTab, accountID: Account.ID? = nil, labelID: MailLabel.ID? = nil, searchIDs: [Conversation.ID]? = nil) {
+    public init(tab: MailTab, accountID: Account.ID? = nil, label: String? = nil, searchIDs: [Conversation.ID]? = nil) {
         self.tab = tab
         self.accountID = accountID
-        self.labelID = labelID
+        self.label = label
         self.searchIDs = searchIDs
     }
 
@@ -70,8 +70,9 @@ public struct ConversationsRequest: FetchKeyRequest {
             let byID = Dictionary(found.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
             return searchIDs.compactMap { byID[$0] }
         }
-        if let labelID {
-            let ids = try ConversationLabel.where { $0.labelID.eq(labelID) }.select(\.conversationID).fetchAll(db)
+        if let label {
+            let ids = try ConversationLabel.where { $0.labelID.in(MailLabel.where { $0.name.eq(label) }.select(\.id)) }
+                .select(\.conversationID).fetchAll(db)
             return try scoped(Conversation.where { $0.id.in(ids) && $0.folder.neq(Folder.spam) && $0.folder.neq(Folder.trash) })
                 .order { $0.lastMessageAt.desc() }
                 .limit(limit)
@@ -113,6 +114,15 @@ public struct ConversationsRequest: FetchKeyRequest {
     }
 }
 
+extension Array where Element == MailLabel {
+    /// Each name once, in order. Gmail accounts and your server can each have a label by the same name, and to you
+    /// that's one label.
+    public var names: [String] {
+        var seen = Set<String>()
+        return map(\.name).filter { seen.insert($0).inserted }
+    }
+}
+
 /// Everything the reader shows for one conversation, observed as a whole.
 public struct ThreadRequest: FetchKeyRequest {
     public struct Value: Equatable, Sendable {
@@ -120,11 +130,12 @@ public struct ThreadRequest: FetchKeyRequest {
         public var account: Account?
         public var messages: [Message] = []
         public var events: [MessageEvent] = []
-        public var labels: [MailLabel] = []
+        /// Label names, once each: Gmail and your server can both have one by the same name.
+        public var labels: [String] = []
 
         public init() {}
 
-        init(conversation: Conversation?, account: Account?, messages: [Message], events: [MessageEvent], labels: [MailLabel]) {
+        init(conversation: Conversation?, account: Account?, messages: [Message], events: [MessageEvent], labels: [String]) {
             self.conversation = conversation
             self.account = account
             self.messages = messages
@@ -150,7 +161,7 @@ public struct ThreadRequest: FetchKeyRequest {
             account: try Account.find(conversation.accountID).fetchOne(db),
             messages: messages,
             events: events,
-            labels: try MailLabel.where { $0.id.in(labelIDs) }.order(by: \.name).fetchAll(db)
+            labels: try MailLabel.where { $0.id.in(labelIDs) }.select(\.name).distinct().order(by: \.name).fetchAll(db)
         )
     }
 }

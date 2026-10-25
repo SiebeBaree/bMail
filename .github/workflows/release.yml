@@ -64,12 +64,27 @@ jobs:
                       CODE_SIGNING_ALLOWED=NO
 
             - name: Sign and package
+              env:
+                  PROVISIONING_PROFILE: ${{ secrets.DEVELOPER_ID_PROVISIONING_PROFILE }}
+                  TEAM_ID: DW92YAHZVK
               run: |
                   app="$RUNNER_TEMP/dmg/bMail.app"
                   mkdir "$RUNNER_TEMP/dmg"
                   ditto "$RUNNER_TEMP/bMail.xcarchive/Products/Applications/bMail.app" "$app"
+                  entitlements="$RUNNER_TEMP/Mail.entitlements"
+                  cp App/Resources/Mail.entitlements "$entitlements"
+                  # iCloud Keychain needs keychain-access-groups, and macOS only lets an app with that entitlement launch
+                  # when an embedded profile grants it. Without the profile secret, accounts stay on this Mac.
+                  if [ -n "$PROVISIONING_PROFILE" ]; then
+                      echo "$PROVISIONING_PROFILE" | base64 --decode > "$app/Contents/embedded.provisionprofile"
+                      sed -i '' "s/[$](AppIdentifierPrefix)/$TEAM_ID./" "$entitlements"
+                      /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM_ID.be.baree.mail" "$entitlements"
+                      /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM_ID" "$entitlements"
+                  else
+                      plutil -remove keychain-access-groups "$entitlements"
+                  fi
                   codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
-                      --entitlements App/Resources/Mail.entitlements --sign "Developer ID Application" "$app"
+                      --entitlements "$entitlements" --sign "Developer ID Application" "$app"
                   codesign --verify --strict "$app"
                   ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
                   diskutil image create from --format ULFO --volumeName bMail "$RUNNER_TEMP/dmg" "$DMG"

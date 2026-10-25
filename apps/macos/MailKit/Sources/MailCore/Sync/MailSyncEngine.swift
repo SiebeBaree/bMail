@@ -201,7 +201,12 @@ public actor MailSyncEngine {
     // MARK: - Routing
 
     private func provider(for mutation: Mutation) throws -> (any MailProvider)? {
-        if case .label = mutation { return providers.first { $0.keepsLabels } }
+        if case let .label(_, labelID, _) = mutation {
+            // A label deleted since has nobody left to tell.
+            guard let label = try store.database.read({ db in try MailLabel.find(labelID).fetchOne(db) }) else { return nil }
+            guard let accountID = label.accountID else { return providers.first { $0.keepsLabels } }
+            return try provider(forAccount: accountID)
+        }
         let accountID = try store.database.read { db in
             try Conversation.find(mutation.conversationID).select(\.accountID).fetchOne(db)
         }

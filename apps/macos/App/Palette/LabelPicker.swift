@@ -1,5 +1,6 @@
 import DesignSystem
 import MailCore
+import MailUI
 import SQLiteData
 import SwiftUI
 
@@ -14,12 +15,12 @@ struct LabelPicker: View {
     @FocusState private var isFocused: Bool
 
     private enum Item: Identifiable {
-        case label(MailLabel)
+        case label(String)
         case create(String)
 
         var id: String {
             switch self {
-            case let .label(label): label.id.uuidString
+            case let .label(name): "label.\(name)"
             case let .create(name): "create.\(name)"
             }
         }
@@ -73,8 +74,8 @@ struct LabelPicker: View {
 
     private var items: [Item] {
         let name = query.trimmingCharacters(in: .whitespaces)
-        let matches = labels
-            .compactMap { label in FuzzyMatch.score(name, in: label.name).map { (label, $0) } }
+        let matches = labels.names
+            .compactMap { label in FuzzyMatch.score(name, in: label).map { (label, $0) } }
             .sorted { $0.1 > $1.1 }
             .map { Item.label($0.0) }
         let exists = labels.contains { $0.name.caseInsensitiveCompare(name) == .orderedSame }
@@ -84,12 +85,12 @@ struct LabelPicker: View {
     private func row(_ item: Item, isHighlighted: Bool) -> some View {
         HStack(spacing: 12) {
             switch item {
-            case let .label(label):
-                Image(systemName: symbol(for: label))
+            case let .label(name):
+                Image(systemName: symbol(for: name))
                     .font(.system(size: 13))
                     .frame(width: 18)
-                    .foregroundStyle(symbol(for: label) == "circle" ? Color.textFaint : Color.accent)
-                Text(label.name)
+                    .foregroundStyle(symbol(for: name) == "circle" ? Color.textFaint : Color.accent)
+                Text(name)
             case let .create(name):
                 Image(systemName: "plus").font(.system(size: 12)).frame(width: 18)
                 Text("Create \u{201C}\(name)\u{201D}")
@@ -104,9 +105,10 @@ struct LabelPicker: View {
     }
 
     /// Filled when every target has the label, a dash when only some do.
-    private func symbol(for label: MailLabel) -> String {
+    private func symbol(for name: String) -> String {
         let targets = Set(model.targetIDs)
-        let count = assignments.count { $0.labelID == label.id && targets.contains($0.conversationID) }
+        let ids = Set(labels.filter { $0.name == name }.map(\.id))
+        let count = Set(assignments.filter { ids.contains($0.labelID) && targets.contains($0.conversationID) }.map(\.conversationID)).count
         return count == 0 ? "circle" : count == targets.count ? "checkmark.circle.fill" : "minus.circle.fill"
     }
 
@@ -120,8 +122,7 @@ struct LabelPicker: View {
         guard let item else { return }
         model.isLabelPickerOpen = false
         switch item {
-        case let .label(label): model.toggleLabel(label.id)
-        case let .create(name): model.createLabel(named: name)
+        case let .label(name), let .create(name): model.toggleLabel(name)
         }
     }
 }

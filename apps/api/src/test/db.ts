@@ -14,7 +14,7 @@ export async function createTestDb() {
     return {
         db: db as unknown as Database,
         reset: async () => {
-            await db.execute(sql`truncate "user", webhook_receipts restart identity cascade`);
+            await db.execute(sql`truncate "user", server_settings, webhook_receipts restart identity cascade`);
         },
         close: () => client.close(),
     };

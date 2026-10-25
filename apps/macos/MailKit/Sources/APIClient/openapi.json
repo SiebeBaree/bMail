@@ -108,13 +108,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 50
-          },
-          "description": {
-            "nullable": true,
-            "type": "string",
-            "maxLength": 500
           }
-        }
+        },
+        "required": [
+          "name"
+        ]
       },
       "SetConversationLabelsInput": {
         "type": "object",
@@ -280,6 +278,30 @@
           "filename",
           "contentType",
           "size"
+        ]
+      },
+      "ClaimRequestInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      },
+      "SetResendKeyInput": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "maxLength": 200,
+            "format": "starts_with",
+            "pattern": "^re_.*"
+          }
+        },
+        "required": [
+          "apiKey"
         ]
       },
       "TrackMessageInput": {
@@ -605,10 +627,14 @@
             "enum": [
               "ok"
             ]
+          },
+          "claimed": {
+            "type": "boolean"
           }
         },
         "required": [
-          "status"
+          "status",
+          "claimed"
         ]
       },
       "Label": {
@@ -620,10 +646,6 @@
             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
           },
           "name": {
-            "type": "string"
-          },
-          "description": {
-            "nullable": true,
             "type": "string"
           },
           "createdAt": {
@@ -641,7 +663,6 @@
         "required": [
           "id",
           "name",
-          "description",
           "createdAt",
           "deletedAt"
         ]
@@ -958,6 +979,32 @@
           "expiresAt"
         ]
       },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ServerStatus": {
+        "type": "object",
+        "properties": {
+          "publicUrl": {
+            "type": "string"
+          },
+          "resend": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "publicUrl",
+          "resend"
+        ]
+      },
       "TrackedHtml": {
         "type": "object",
         "properties": {
@@ -1075,6 +1122,117 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claim": {
+      "post": {
+        "operationId": "claim",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequestInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server": {
+      "get": {
+        "operationId": "serverStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/server/resend": {
+      "put": {
+        "operationId": "setResendKey",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetResendKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

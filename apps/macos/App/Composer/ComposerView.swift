@@ -165,7 +165,18 @@ struct ComposerView: View {
                 Text("Track opens and clicks").foregroundStyle(model.trackingEnabled ? Color.textPrimary : Color.textSecondary)
             }
             .toggleStyle(.mailSwitch)
-            KeyCap("⌘⇧T")
+            .disabled(!model.canTrack)
+            if !model.canTrack {
+                HStack(spacing: 4) {
+                    Text("Needs a server.").foregroundStyle(Color.textMuted)
+                    Button("Set one up") { model.openSettings() }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.link)
+                }
+                .font(.geist(12))
+            } else {
+                KeyCap("⌘⇧T")
+            }
             if model.trackingEnabled {
                 Text("Adds a hidden image and tracked links. Never counts you here.")
                     .font(.geist(12))

@@ -36,7 +36,7 @@ final class Labeller {
         let store = session.store
         let candidates = try Self.candidates(since: since, in: store)
         guard !candidates.isEmpty else { return }
-        let guides = try Self.guides(in: store)
+        let guides = try Self.guides(describedAs: session.ai.labelDescriptions, in: store)
         guard !guides.isEmpty else { return }
         let system = LabelPrompt.system(guides)
         for id in candidates {
@@ -47,7 +47,12 @@ final class Labeller {
             ))
             session.aiProblem = nil
             // You may have labelled it yourself while the model was thinking. Then it keeps yours.
-            try store.recordLabelDecision(try Self.isLabelled(id, in: store) ? [] : LabelPrompt.labels(in: answer, from: guides), on: id)
+            let names = try Self.isLabelled(id, in: store) ? [] : LabelPrompt.labels(in: answer, from: guides)
+            var labelIDs: [MailLabel.ID] = []
+            if !names.isEmpty, let owner = try store.labelOwners(of: [id])[id] {
+                for name in names { labelIDs.append(try await session.label(named: name, for: owner).id) }
+            }
+            try store.recordLabelDecision(labelIDs, on: id)
             session.syncNow()
         }
     }
@@ -67,23 +72,26 @@ final class Labeller {
         }
     }
 
-    /// Every label with a description, with up to three examples and three corrections each, newest first.
-    static func guides(in store: MailStore) throws -> [LabelGuide] {
+    /// Every label with a description, by name, with up to three examples and three corrections each, newest first. A
+    /// name covers that label in every Gmail account and on your server.
+    static func guides(describedAs descriptions: [String: String], in store: MailStore) throws -> [LabelGuide] {
         try store.database.read { db in
-            let labels = try MailLabel.order(by: \.name).fetchAll(db).filter { !($0.description ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            let labels = try MailLabel.where { $0.name.in(Array(descriptions.keys)) }.fetchAll(db)
             guard !labels.isEmpty else { return [] }
             let decisions = try LabelDecision.order { $0.decidedAt.desc() }.limit(1_000).fetchAll(db)
             let applied = Dictionary(grouping: try ConversationLabel.fetchAll(db), by: \.labelID).mapValues { Set($0.map(\.conversationID)) }
-            return try labels.map { label in
-                let on = applied[label.id] ?? []
-                let byAI = Set(decisions.filter { $0.labelIDs.contains(label.id) }.map(\.conversationID))
-                let corrections = decisions.filter { $0.labelIDs.contains(label.id) && !on.contains($0.conversationID) }.prefix(3).map(\.conversationID)
+            return try Set(labels.map(\.name)).sorted().map { name in
+                let ids = Set(labels.filter { $0.name == name }.map(\.id))
+                let on = ids.reduce(into: Set<Conversation.ID>()) { on, id in on.formUnion(applied[id] ?? []) }
+                let mine = decisions.filter { !ids.isDisjoint(with: $0.labelIDs) }
+                let byAI = Set(mine.map(\.conversationID))
+                let corrections = mine.filter { !on.contains($0.conversationID) }.prefix(3).map(\.conversationID)
                 let examples = try Conversation.where { $0.id.in(Array(on.subtracting(byAI))) }
                     .order { $0.lastMessageAt.desc() }
                     .limit(3)
                     .fetchAll(db)
                 let corrected = try Conversation.where { $0.id.in(Array(corrections)) }.fetchAll(db)
-                return LabelGuide(label: label, examples: examples.map(example), corrections: corrected.map(example))
+                return LabelGuide(name: name, description: descriptions[name] ?? "", examples: examples.map(example), corrections: corrected.map(example))
             }
         }
     }

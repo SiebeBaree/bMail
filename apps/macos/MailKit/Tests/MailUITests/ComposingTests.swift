@@ -81,3 +81,12 @@ import Testing
         )
     }
 }
+
+@Suite struct ServerSetupTests {
+    @Test func aConnectLinkCarriesTheServer() {
+        #expect(ServerSetup.server(in: URL(string: "bmail://connect?server=bmail-siebe.vercel.app")!)?.absoluteString == "https://bmail-siebe.vercel.app")
+        #expect(ServerSetup.server(in: URL(string: "bmail://connect?server=https%3A%2F%2Fmail.baree.be%2F")!)?.absoluteString == "https://mail.baree.be")
+        #expect(ServerSetup.server(in: URL(string: "bmail://other?server=mail.baree.be")!) == nil)
+        #expect(ServerSetup.server(in: URL(string: "https://connect?server=mail.baree.be")!) == nil)
+    }
+}

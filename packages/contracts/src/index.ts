@@ -6,6 +6,7 @@ export * from "./health";
 export * from "./labels";
 export * from "./mailboxes";
 export * from "./messages";
+export * from "./server";
 export * from "./sync";
 export * from "./tracking";
 export * from "./vocabulary";

@@ -1,13 +1,27 @@
 import Foundation
 import MailCore
 
-/// Gmail threads to conversations. Gmail has labels, the app has folders: INBOX means inbox, SPAM and TRASH map to
-/// themselves and a thread with none of them is done (archived).
+/// Gmail threads to conversations. Gmail's system labels become folders: INBOX means inbox, SPAM and TRASH map to
+/// themselves and a thread with none of them is done (archived). Labels you made become bMail labels.
 struct GmailMapping {
     let accountID: Account.ID
 
     func conversationID(thread: String) -> Conversation.ID { UUID(stableFrom: "gmail:\(accountID):\(thread)") }
     func messageID(_ id: String) -> Message.ID { UUID(stableFrom: "gmail:\(accountID):message:\(id)") }
+    /// From Gmail's label id rather than the name, so renaming a label in Gmail keeps it the same label here.
+    func labelID(_ id: String) -> MailLabel.ID { UUID(stableFrom: "gmail:\(accountID):label:\(id)") }
+
+    func label(_ wire: Gmail.Label) -> MailLabel {
+        MailLabel(id: labelID(wire.id), name: wire.name, accountID: accountID, remoteID: wire.id)
+    }
+
+    /// Gmail's ids of every label on the thread's messages, drafts left out like everywhere else.
+    func labelIDs(_ thread: Gmail.Thread) -> Set<String> {
+        (thread.messages ?? []).reduce(into: Set<String>()) { all, message in
+            let labels = message.labelIds ?? []
+            if !labels.contains("DRAFT") { all.formUnion(labels) }
+        }
+    }
 
     func conversation(_ thread: Gmail.Thread) -> (Conversation, [Message])? {
         // Drafts aren't mail yet, and Gmail gives a draft a new id on every autosave.

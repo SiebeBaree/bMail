@@ -64,7 +64,7 @@ struct AISettingsView: View {
 
             if !labels.isEmpty {
                 Section {
-                    ForEach(labels) { LabelDescriptionRow(label: $0) }
+                    ForEach(labels.names, id: \.self) { LabelDescriptionRow(name: $0) }
                 } header: {
                     Text("What belongs under each label")
                 }
@@ -165,33 +165,27 @@ private struct ModelPicker: View {
 }
 
 private struct LabelDescriptionRow: View {
-    let label: MailLabel
+    let name: String
     @Environment(AppModel.self) private var model
     @State private var text = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label.name).font(.phone(16, .medium))
+            Text(name).font(.phone(16, .medium))
             TextField("What belongs here, so AI can use it", text: $text, axis: .vertical)
                 .font(.phone(15))
                 .foregroundStyle(Color.textSecondary)
                 .lineLimit(1...5)
         }
         .padding(.vertical, 4)
-        .onAppear { text = label.description ?? "" }
-        // Saved once you stop typing, like a signature.
+        .onAppear { text = model.session.ai.labelDescriptions[name] ?? "" }
+        // Saved once you stop typing, so auto labelling doesn't run on every keystroke.
         .task(id: text) {
             let description = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard description != (label.description ?? "") else { return }
+            guard description != (model.session.ai.labelDescriptions[name] ?? "") else { return }
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
-            do {
-                try await model.session.describeLabel(label.id, as: description)
-                model.session.labelNewMail()
-            } catch {
-                Haptics.failure()
-                model.session.toasts.show(Toast("Couldn't save what belongs under \(label.name).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
-            }
+            model.session.describeLabel(named: name, as: description)
         }
     }
 }

@@ -210,17 +210,27 @@ private var migrator: DatabaseMigrator {
                 """
         )
     }
+    // Named for the label descriptions it once added too, before they moved to the AI settings. It never shipped with them.
     migrator.registerMigration("Label descriptions and label decisions") { db in
         try db.execute(
             sql: """
-                ALTER TABLE "labels" ADD COLUMN "description" TEXT;
-
                 CREATE TABLE "labelDecisions" (
                     "conversationID" TEXT PRIMARY KEY NOT NULL,
                     "labelIDs" TEXT NOT NULL,
                     "decidedAt" TEXT NOT NULL
                 ) STRICT;
                 CREATE INDEX "labelDecisions_by_date" ON "labelDecisions"("decidedAt" DESC);
+                """
+        )
+    }
+    migrator.registerMigration("Labels per account") { db in
+        try db.execute(
+            sql: """
+                ALTER TABLE "labels" ADD COLUMN "accountID" TEXT REFERENCES "accounts"("id") ON DELETE CASCADE;
+                ALTER TABLE "labels" ADD COLUMN "remoteID" TEXT;
+
+                -- Gmail syncs again from the start, so cached threads pick up their Gmail labels.
+                DELETE FROM "syncCursors" WHERE "source" LIKE 'gmail:%';
                 """
         )
     }

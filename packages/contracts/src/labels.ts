@@ -5,16 +5,12 @@ export const labelSchema = z
     .object({
         id: z.uuid(),
         name: z.string(),
-        /** What belongs under the label, in your words. Auto labelling only applies labels that have one. */
-        description: z.string().nullable(),
         createdAt: z.iso.datetime(),
         deletedAt: z.iso.datetime().nullable(),
     })
     .meta({ id: "Label" });
 
 const labelName = z.string().trim().min(1, "Give the label a name.").max(50, "Label names can be up to 50 characters.");
-/** Empty clears it. */
-const labelDescription = z.string().trim().max(500, "Descriptions can be up to 500 characters.").nullable();
 
 export const createLabelSchema = z
     .object({
@@ -24,11 +20,9 @@ export const createLabelSchema = z
     })
     .meta({ id: "CreateLabel" });
 
-/** Changes what's given. Older apps only send a name. */
 export const updateLabelSchema = z
     .object({
-        name: labelName.optional(),
-        description: labelDescription.optional(),
+        name: labelName,
     })
     .meta({ id: "UpdateLabel" });
 

@@ -3,21 +3,15 @@ import { z } from "zod";
 
 const isProd = process.env.NODE_ENV === "production";
 
-const commaList = z.string().transform((value) =>
-    value
-        .split(",")
-        .map((entry) => entry.trim().toLowerCase())
-        .filter(Boolean),
-);
-
 /**
- * Api environment.
+ * Api environment. Only DATABASE_URL is required, which is what lets the Vercel deploy button run without anyone typing
+ * a variable.
  *
- * - DATABASE_URL and ALLOWED_EMAILS are always required. Only allowlisted emails can have an account, which is what
- *   keeps strangers away from your Resend account.
- * - Secrets, Resend and R2 are required in production and optional in dev, where tests and the seeded local database
- *   run without them (storage falls back to memory, sending is disabled).
- * - Social sign-in is optional everywhere: a provider without its id is simply not offered.
+ * - PUBLIC_URL falls back to the project's production domain on Vercel.
+ * - The tracking secret and Resend's key and webhook secret normally live in Postgres: the server generates the first
+ *   and bMail sends the key when you add your first domain. Set here, they win, which keeps servers deployed before
+ *   that working unchanged.
+ * - Attachments go to R2 when its four variables are set, otherwise to the project's Vercel Blob store.
  */
 export const env = createEnv({
     server: {
@@ -25,25 +19,29 @@ export const env = createEnv({
         PORT: z.coerce.number().int().positive().default(3001),
         // Tracking pixels and links are built from it, and Gmail's image proxy never loads an http pixel.
         PUBLIC_URL: isProd ? z.url({ protocol: /^https$/ }) : z.url().default("http://localhost:3001"),
-        ALLOWED_EMAILS: commaList,
+        // Lets the owner take the server back after losing every device. Unset, a claimed server can't be claimed again.
+        CLAIM_CODE: z.string().min(1).optional(),
 
-        BETTER_AUTH_SECRET: isProd
-            ? z.string().min(32)
-            : z.string().min(32).default("dev-only-secret-dev-only-secret-dev"),
-        APPLE_BUNDLE_ID: z.string().min(1).optional(),
+        TRACKING_SECRET: z.string().min(32).optional(),
+        RESEND_API_KEY: z.string().startsWith("re_").optional(),
+        RESEND_WEBHOOK_SECRET: z.string().startsWith("whsec_").optional(),
 
-        RESEND_API_KEY: isProd ? z.string().startsWith("re_") : z.string().startsWith("re_").optional(),
-        RESEND_WEBHOOK_SECRET: isProd ? z.string().startsWith("whsec_") : z.string().startsWith("whsec_").optional(),
-        TRACKING_SECRET: isProd ? z.string().min(32) : z.string().min(32).default("dev-only-tracking-secret-dev-only"),
-
-        R2_ACCOUNT_ID: isProd ? z.string().min(1) : z.string().min(1).optional(),
-        R2_ACCESS_KEY_ID: isProd ? z.string().min(1) : z.string().min(1).optional(),
-        R2_SECRET_ACCESS_KEY: isProd ? z.string().min(1) : z.string().min(1).optional(),
-        R2_BUCKET: isProd ? z.string().min(1) : z.string().min(1).optional(),
+        R2_ACCOUNT_ID: z.string().min(1).optional(),
+        R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+        R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+        R2_BUCKET: z.string().min(1).optional(),
+        // A Blob store connected to the project sets one of these. On Vercel the SDK signs in with OIDC.
+        BLOB_READ_WRITE_TOKEN: z.string().min(1).optional(),
+        BLOB_STORE_ID: z.string().min(1).optional(),
 
         SENTRY_DSN: z.url().optional(),
     },
-    runtimeEnv: process.env,
+    runtimeEnv: {
+        ...process.env,
+        PUBLIC_URL:
+            process.env.PUBLIC_URL ||
+            (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`),
+    },
     emptyStringAsUndefined: true,
     // For processes that have no environment, e.g. CI: SKIP_ENV_VALIDATION=1 pnpm openapi
     skipValidation: Boolean(process.env.SKIP_ENV_VALIDATION),

@@ -1,7 +1,8 @@
 import type { DnsRecord, Domain } from "@repo/contracts";
 import { Resend, type WebhookEventPayload } from "resend";
 
-import { UpstreamError } from "./errors";
+import { BadRequestError, UpstreamError } from "./errors";
+import type { ResendConfig } from "./server-settings";
 
 // Resend sends from Ireland, closest to Belgium. Changing it means re-creating domains.
 const REGION = "eu-west-1";
@@ -60,20 +61,44 @@ export type ResendGateway = {
     send(email: OutgoingEmail, idempotencyKey: string): Promise<{ id: string }>;
     getReceivedEmail(id: string): Promise<ReceivedEmail>;
     listReceivedAttachments(emailId: string): Promise<ReceivedAttachment[]>;
-    /** Throws when the signature doesn't match. */
-    verifyWebhook(payload: string, headers: Headers): WebhookEventPayload;
+    /** Throws when the signature doesn't match, or when Resend isn't set up yet. */
+    verifyWebhook(payload: string, headers: Headers): Promise<WebhookEventPayload>;
+    /**
+     * Points a new webhook at this server with a key that isn't saved yet, which is also how a key gets checked.
+     * Throws a BadRequestError when Resend refuses the key.
+     */
+    createWebhook(apiKey: string, endpoint: string): Promise<{ id: string; signingSecret: string }>;
+    removeWebhook(apiKey: string, id: string): Promise<void>;
 };
 
-export function createResendGateway(apiKey: string, webhookSecret: string): ResendGateway {
-    const resend = new Resend(apiKey);
+/** What Resend sends us. Delivery events feed tracking; email.received is inbound mail. */
+const WEBHOOK_EVENTS = [
+    "email.received",
+    "email.sent",
+    "email.delivered",
+    "email.delivery_delayed",
+    "email.bounced",
+    "email.complained",
+    "email.failed",
+] as const;
+
+/** `config` runs on every call: bMail can save a key while the server runs, on any instance. */
+export function createResendGateway(config: () => Promise<ResendConfig | null>): ResendGateway {
+    async function client() {
+        const current = await config();
+        if (!current) throw new UpstreamError("Resend isn't set up. Add your Resend API key in bMail's Settings.");
+        return { resend: new Resend(current.apiKey), webhookSecret: current.webhookSecret };
+    }
 
     async function getDomain(id: string): Promise<ResendDomain> {
+        const { resend } = await client();
         const domain = await unwrap(resend.domains.get(id), "look up the domain");
         return { id: domain.id, status: domainStatus(domain.status), records: dnsRecords(domain.records) };
     }
 
     return {
         async createDomain(name) {
+            const { resend } = await client();
             const capabilities = { sending: "enabled", receiving: "enabled" } as const;
             const { data: created, error } = await resend.domains.create({ name, region: REGION, capabilities });
             if (created) {
@@ -92,12 +117,15 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
         },
         getDomain,
         async verifyDomain(id) {
+            const { resend } = await client();
             await unwrap(resend.domains.verify(id), "start verification");
         },
         async removeDomain(id) {
+            const { resend } = await client();
             await unwrap(resend.domains.remove(id), "remove the domain");
         },
         async send(email, idempotencyKey) {
+            const { resend } = await client();
             return unwrap(
                 resend.emails.send(
                     {
@@ -122,6 +150,7 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
             );
         },
         async getReceivedEmail(id) {
+            const { resend } = await client();
             const email = await unwrap(resend.emails.receiving.get(id), "fetch the received email");
             return {
                 id: email.id,
@@ -141,6 +170,7 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
             };
         },
         async listReceivedAttachments(emailId) {
+            const { resend } = await client();
             const list = await unwrap(resend.emails.receiving.attachments.list({ emailId }), "list attachments");
             return list.data.map((file) => ({
                 id: file.id,
@@ -151,7 +181,8 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
                 downloadUrl: file.download_url,
             }));
         },
-        verifyWebhook(payload, headers) {
+        async verifyWebhook(payload, headers) {
+            const { resend, webhookSecret } = await client();
             return resend.webhooks.verify({
                 payload,
                 headers: {
@@ -161,6 +192,17 @@ export function createResendGateway(apiKey: string, webhookSecret: string): Rese
                 },
                 webhookSecret,
             });
+        },
+        async createWebhook(apiKey, endpoint) {
+            const { data, error } = await new Resend(apiKey).webhooks.create({ endpoint, events: [...WEBHOOK_EVENTS] });
+            if (data) return { id: data.id, signingSecret: data.signing_secret };
+            if (error?.statusCode === 401 || error?.statusCode === 403) {
+                throw new BadRequestError("Resend didn't accept that key. Use a full access key.");
+            }
+            throw new UpstreamError(`Resend couldn't create the webhook: ${error?.message ?? "empty response"}.`);
+        },
+        async removeWebhook(apiKey, id) {
+            await unwrap(new Resend(apiKey).webhooks.remove(id), "remove the old webhook");
         },
     };
 }

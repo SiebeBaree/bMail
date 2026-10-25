@@ -18,7 +18,7 @@ export function faq(): Question[] {
         },
         {
             question: "Is bMail free?",
-            answer: "Yes. The app is free and open source under the MIT license. It signs in to a small api that you host yourself, and the free plans of Vercel, Neon, Resend and Cloudflare R2 are enough to run it.",
+            answer: "Yes. The app is free and open source under the MIT license. Gmail needs nothing else. Your own domains and tracking run on a small api you host yourself, and the free plans of Vercel, Neon and Resend are enough to run it.",
         },
         {
             question: "Which Macs does bMail run on?",
@@ -26,7 +26,7 @@ export function faq(): Question[] {
         },
         {
             question: "Does bMail work with Gmail?",
-            answer: "Yes. Sign in with Google and bMail syncs your Gmail straight from your Mac to Google. You can add more than one account and read them together or one at a time.",
+            answer: "Yes. Sign in with Google and bMail syncs your Gmail straight from your Mac to Google, with no bMail account. You can add more than one account and read them together or one at a time.",
         },
         {
             question: "Can I use bMail with my own domain?",
@@ -38,11 +38,11 @@ export function faq(): Question[] {
         },
         {
             question: "Where is my email stored?",
-            answer: "On your Mac, in a local database. Gmail stays in your Google account. Mail for your own domain is stored in your own Postgres database on Neon and attachments in your own Cloudflare R2 bucket. There is no shared bMail server.",
+            answer: "On your Mac, in a local database. Gmail stays in your Google account. Mail for your own domain is stored in your own Postgres database on Neon and attachments in your own Vercel Blob store or Cloudflare R2 bucket. There is no shared bMail server.",
         },
         {
             question: "Do I need to host a server?",
-            answer: "Yes, a small api. bMail signs in to it, and it handles your own domains, labels and open tracking. You deploy it to Vercel with Neon, Resend and Cloudflare R2.",
+            answer: "Only for your own domains and open tracking. Gmail works without one. The server is a small api you deploy to Vercel with one button, and the first bMail to connect to it owns it.",
         },
         {
             question: "Can bMail tell me when an email is opened?",

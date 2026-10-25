@@ -11,12 +11,23 @@ struct RootView: View {
     @State private var background: BackgroundSending?
 
     var body: some View {
+        @Bindable var model = model
         ZStack {
             switch model.session.phase {
-            case .signedOut: SignInView().transition(.opacity)
+            case .welcome: WelcomeView().transition(.opacity)
             case .ready: InboxScreen().transition(.opacity)
             }
         }
+        // Here rather than on the inbox, so connecting a server can ask from the welcome screen too.
+        .sheet(item: $model.sheet, onDismiss: model.sheetDismissed) { sheet in
+            switch sheet {
+            case let .composer(composer): ComposerView(model: composer)
+            case let .labels(ids): LabelPicker(conversations: ids)
+            case .settings: SettingsView()
+            case let .connectServer(url): ConnectServerSheet(url: url)
+            }
+        }
+        .onOpenURL { model.handle($0) }
         .animation(.easeInOut(duration: 0.3), value: model.session.phase)
         .font(.phone(16))
         .foregroundStyle(Color.textPrimary)

@@ -100,6 +100,15 @@ import Testing
         #expect(messages.count == 1)
     }
 
+    @Test func labelsComeFromTheThreadAndKeepTheirIdThroughARename() throws {
+        #expect(mapping.labelIDs(try thread(labels: [["INBOX", "Label_1"], ["DRAFT", "Label_2"]])) == ["INBOX", "Label_1"])
+        let label = mapping.label(Gmail.Label(id: "Label_1", name: "Clients", type: "user"))
+        let renamed = mapping.label(Gmail.Label(id: "Label_1", name: "Customers", type: "user"))
+        #expect(label.id == renamed.id)
+        #expect(label.accountID == mapping.accountID)
+        #expect(label.remoteID == "Label_1")
+    }
+
     @Test func labelsBecomeFolderReadAndStarredState() throws {
         let (inbox, _) = try #require(mapping.conversation(try thread(labels: [["INBOX", "UNREAD"], ["SENT"]])))
         #expect(inbox.folder == .inbox)
@@ -174,6 +183,35 @@ extension GmailMappingTests {
     }
 }
 
+/// Answers every request with one status and JSON body.
+private struct Answering: ClientTransport {
+    let status: HTTPResponse.Status
+    let json: String
+
+    func send(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String) async throws -> (HTTPResponse, HTTPBody?) {
+        var response = HTTPResponse(status: status)
+        response.headerFields[.contentType] = "application/json"
+        return (response, HTTPBody(json))
+    }
+}
+
+@Suite struct ClaimTests {
+    let url = URL(string: "https://bmail-siebe.vercel.app")!
+
+    @Test func aFreshServerHandsOverItsToken() async throws {
+        let server = ServerConnection(baseURL: url, token: nil, transport: Answering(status: .ok, json: #"{"token":"abc"}"#))
+        #expect(try await server.claim() == ServerLink(url: url, token: "abc"))
+    }
+
+    @Test func anOwnedServerSaysWhatToDo() async throws {
+        let message = "This server already has an owner. If it's yours, add CLAIM_CODE to the project on Vercel, redeploy and enter it here."
+        let server = ServerConnection(baseURL: url, token: nil, transport: Answering(status: .conflict, json: #"{"message":"\#(message)","requestId":"r"}"#))
+        let error = await #expect(throws: ProviderError.self) { try await server.claim() }
+        #expect(error?.kind == .rejected)
+        #expect(error?.message == message)
+    }
+}
+
 /// Answers every request the way the api answers a delete: 204 and no body.
 private struct NoContent: ClientTransport {
     func send(_ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String) async throws -> (HTTPResponse, HTTPBody?) {
@@ -183,7 +221,7 @@ private struct NoContent: ClientTransport {
 
 @Suite struct ServerAdminTests {
     @Test func deletesSucceedOnTheirEmptyAnswer() async throws {
-        let admin = ServerAdmin(connection: ServerConnection(baseURL: URL(string: "https://api.example")!, transport: NoContent()))
+        let admin = ServerAdmin(connection: ServerConnection(baseURL: URL(string: "https://api.example")!, token: "t", transport: NoContent()))
         let id = UUID()
         #expect(try await admin.deleteLabel(id).removedLabelIDs == [id])
         #expect(try await admin.removeDomain(id).removedDomainIDs == [id])

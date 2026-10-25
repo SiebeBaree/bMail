@@ -83,6 +83,28 @@ public struct ServerAdmin: Sendable {
     }
 }
 
+// MARK: - Resend
+
+extension ServerAdmin {
+    /// Whether the server has a Resend key, which it needs before your first domain.
+    public func hasResend() async throws -> Bool {
+        switch try await connection.client.serverStatus() {
+        case let .ok(ok): return try ok.body.json.resend
+        default: throw ProviderError(.unavailable, "Couldn't reach \(connection.host).")
+        }
+    }
+
+    /// Gives the server your Resend key. It checks the key and sets up its own webhook with it.
+    public func setResendKey(_ key: String) async throws {
+        switch try await connection.client.setResendKey(body: .json(.init(apiKey: key))) {
+        case .ok: return
+        case let .badRequest(error): throw ProviderError(.rejected, try error.body.json.issues?.first?.message ?? error.body.json.message)
+        case let .badGateway(error): throw ProviderError(.unavailable, try error.body.json.message)
+        default: throw ProviderError(.unavailable, "Couldn't save the key. Try again in a moment.")
+        }
+    }
+}
+
 // MARK: - Labels
 
 extension ServerAdmin {
@@ -103,16 +125,6 @@ extension ServerAdmin {
         case let .notFound(error): throw ProviderError(.rejected, try error.body.json.message)
         case let .conflict(error): throw ProviderError(.rejected, try error.body.json.message)
         case .undocumented: throw ProviderError(.unavailable, "Couldn't rename the label.")
-        }
-    }
-
-    /// Empty clears it, and the label is no longer applied by AI.
-    public func describeLabel(_ id: MailLabel.ID, as description: String) async throws -> ChangeSet {
-        switch try await connection.client.updateLabel(path: .init(id: id.wire), body: .json(.init(description: description))) {
-        case let .ok(ok): return ChangeSet(label: MailLabel(try ok.body.json))
-        case let .badRequest(error): throw ProviderError(.rejected, try error.body.json.issues?.first?.message ?? error.body.json.message)
-        case let .notFound(error): throw ProviderError(.rejected, try error.body.json.message)
-        case .conflict, .undocumented: throw ProviderError(.unavailable, "Couldn't save the description.")
         }
     }
 

@@ -4,7 +4,11 @@ import { Reveal } from "@/components/reveal";
 import { Diagram } from "./diagram";
 import { Heading, Section } from "./frame";
 
-const commands = ["pnpm install", "pnpm db:migrate", "pnpm --filter api password you@example.com"];
+const steps = [
+    "Deploy the api to Vercel with one button",
+    "Open bMail and connect to it",
+    "Paste a Resend key and add your domain",
+];
 
 export function SelfHost() {
     return (
@@ -12,8 +16,9 @@ export function SelfHost() {
             <Reveal>
                 <Heading title="Host it yourself for free">
                     <p>
-                        There's no bMail server. Gmail connects straight from the app, and your own domain runs on a
-                        small api you deploy to Vercel. The free plans from Neon, Resend and Cloudflare R2 are enough.
+                        There's no bMail server and no bMail account. Gmail connects straight from the app. Your own
+                        domain and tracking run on a small api you deploy to Vercel, where the free plans from Neon and
+                        Resend are enough.
                     </p>
                 </Heading>
                 <div className="mt-10 overflow-hidden rounded-xl border border-line bg-canvas">
@@ -21,17 +26,16 @@ export function SelfHost() {
                         <span className="size-2.5 rounded-full bg-line-strong" />
                         <span className="size-2.5 rounded-full bg-line-strong" />
                         <span className="size-2.5 rounded-full bg-line-strong" />
-                        <span className="ml-2 font-mono text-[12px] text-faint">~/bMail</span>
+                        <span className="ml-2 font-mono text-[12px] text-faint">Your server</span>
                     </div>
-                    <pre className="overflow-x-auto p-4 font-mono text-[13px] leading-[1.9]">
-                        {commands.map((command) => (
-                            <div key={command}>
-                                <span className="text-faint select-none">$ </span>
-                                {command}
-                            </div>
+                    <ol className="p-4 font-mono text-[13px] leading-[1.9]">
+                        {steps.map((step, index) => (
+                            <li key={step}>
+                                <span className="text-faint select-none">{index + 1} </span>
+                                {step}
+                            </li>
                         ))}
-                        <div className="text-faint"># then deploy apps/api to Vercel and sign in</div>
-                    </pre>
+                    </ol>
                 </div>
             </Reveal>
             <Reveal delay={0.1}>

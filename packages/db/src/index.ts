@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 
 import * as schema from "./schema";
 
-// The WebSocket driver rather than neon-http: inbound mail, sending and Better Auth all need interactive transactions.
+// The WebSocket driver rather than neon-http: inbound mail, sending and claiming all need interactive transactions.
 export function createDb(connectionString: string) {
     return drizzle(new Pool({ connectionString }), { schema, casing: "snake_case" });
 }

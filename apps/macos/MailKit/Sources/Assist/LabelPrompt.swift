@@ -1,9 +1,10 @@
 import Foundation
 import MailCore
 
-/// One label auto labelling may apply, with what it learned from you about it.
+/// One label auto labelling may apply, by name, with what it learned from you about it.
 public struct LabelGuide: Sendable {
-    public var label: MailLabel
+    public var name: String
+    public var description: String
     /// Conversations you put the label on yourself.
     public var examples: [Example]
     /// Conversations auto labelling put it on and you took it off.
@@ -21,8 +22,9 @@ public struct LabelGuide: Sendable {
         }
     }
 
-    public init(label: MailLabel, examples: [Example], corrections: [Example]) {
-        self.label = label
+    public init(name: String, description: String, examples: [Example], corrections: [Example]) {
+        self.name = name
+        self.description = description
         self.examples = examples
         self.corrections = corrections
     }
@@ -49,7 +51,7 @@ public enum LabelPrompt {
             Labels:
             """
         for guide in guides {
-            system += "\n<label name=\"\(guide.label.name)\">\n\(guide.label.description ?? "")"
+            system += "\n<label name=\"\(guide.name)\">\n\(guide.description)"
             if !guide.examples.isEmpty {
                 system += "\nThe user filed these under it:"
                 for example in guide.examples { system += "\n- \(line(example))" }
@@ -77,16 +79,12 @@ public enum LabelPrompt {
         """
     }
 
-    /// The labels the answer names, in your labels' own ids. Unknown names are dropped.
-    public static func labels(in answer: String, from guides: [LabelGuide]) -> [MailLabel.ID] {
-        let names = answer
+    /// The labels the answer names, spelled as yours are. Unknown names are dropped.
+    public static func labels(in answer: String, from guides: [LabelGuide]) -> [String] {
+        let names = Set(answer
             .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " -*\"'`")).lowercased() }
-        var picked: [MailLabel.ID] = []
-        for guide in guides where names.contains(guide.label.name.lowercased()) && !picked.contains(guide.label.id) {
-            picked.append(guide.label.id)
-        }
-        return picked
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " -*\"'`")).lowercased() })
+        return guides.map(\.name).filter { names.contains($0.lowercased()) }
     }
 
     private static func line(_ example: LabelGuide.Example) -> String {

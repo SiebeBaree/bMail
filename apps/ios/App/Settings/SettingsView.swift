@@ -6,7 +6,8 @@ import Providers
 import SQLiteData
 import SwiftUI
 
-/// Accounts, labels, your domains and the server, as one sheet. Every way to add an address starts from Add Account.
+/// Accounts, labels, AI and your domains with the server behind them, as one sheet. Every way to add an address starts from
+/// Add Account, and your server only shows up once you want your own domain.
 struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -18,11 +19,16 @@ struct SettingsView: View {
     @State private var newAddress = ""
     @State private var isAddingDomain = false
     @State private var newDomain = ""
-    @State private var renaming: MailLabel?
+    @State private var renaming: String?
     @State private var newLabelName = ""
-    @State private var deleting: MailLabel?
-    @State private var isConfirmingSignOut = false
+    @State private var deleting: String?
+    @State private var isSettingUpServer = false
+    @State private var isConfirmingDisconnect = false
     @State private var isConnecting = false
+    /// Nil until the server says. A server needs your Resend key before its first domain.
+    @State private var hasResend: Bool?
+    @State private var resendKey = ""
+    @State private var isSavingKey = false
 
     var body: some View {
         NavigationStack {
@@ -30,8 +36,16 @@ struct SettingsView: View {
                 accountsSection
                 labelsSection
                 aiSection
-                domainsSection
-                serverSection
+                if let server = model.session.server {
+                    domainsSection
+                    serverSection(server)
+                } else {
+                    Section {} footer: { version }
+                }
+            }
+            .navigationDestination(isPresented: $isSettingUpServer) { ServerSetupScreen() }
+            .task(id: model.session.server?.baseURL) {
+                hasResend = model.session.server == nil ? nil : try? await model.session.admin.hasResend()
             }
             .font(.phone(16))
             .scrollContentBackground(.hidden)
@@ -66,7 +80,7 @@ struct SettingsView: View {
                 Button("Rename") { if let label = renaming { rename(label) } }
             }
             .confirmationDialog(
-                "Delete \u{201C}\(deleting?.name ?? "")\u{201D}?",
+                "Delete \u{201C}\(deleting ?? "")\u{201D}?",
                 isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } },
                 titleVisibility: .visible
             ) {
@@ -74,13 +88,14 @@ struct SettingsView: View {
             } message: {
                 Text("It comes off every conversation that has it.")
             }
-            .confirmationDialog("Sign out of bMail?", isPresented: $isConfirmingSignOut, titleVisibility: .visible) {
-                Button("Sign Out", role: .destructive) {
-                    dismiss()
-                    Task { await model.signOut() }
-                }
+            .confirmationDialog(
+                "Disconnect \(model.session.server?.host ?? "your server")?",
+                isPresented: $isConfirmingDisconnect,
+                titleVisibility: .visible
+            ) {
+                Button("Disconnect", role: .destructive) { model.session.disconnectServer() }
             } message: {
-                Text("This iPhone forgets your mail and your Gmail sign-ins. Everything syncs again when you sign back in.")
+                Text("Your domains' mail and all tracking leave bMail. Gmail stays.")
             }
         }
         .presentationBackground(Color.chrome)
@@ -107,12 +122,12 @@ struct SettingsView: View {
 
     private var labelsSection: some View {
         Section {
-            ForEach(labels) { label in
+            ForEach(labels.names, id: \.self) { label in
                 Button {
-                    newLabelName = label.name
+                    newLabelName = label
                     renaming = label
                 } label: {
-                    Label(label.name, systemImage: "tag").foregroundStyle(Color.textPrimary)
+                    Label(label, systemImage: "tag").foregroundStyle(Color.textPrimary)
                 }
                 .swipeActions {
                     Button("Delete", systemImage: "trash", role: .destructive) { deleting = label }
@@ -139,7 +154,36 @@ struct SettingsView: View {
         .listRowBackground(Color.raised)
     }
 
-    private var domainsSection: some View {
+    @ViewBuilder private var domainsSection: some View {
+        if hasResend == false, domains.isEmpty {
+            resendSection
+        } else {
+            domainList
+        }
+    }
+
+    /// Your server sends and receives through your Resend account, so it asks for a key once, before your first domain.
+    private var resendSection: some View {
+        Section {
+            SecureField("re_…", text: $resendKey)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.done)
+                .onSubmit(saveResendKey)
+            Button(isSavingKey ? "Saving" : "Save Key", action: saveResendKey)
+                .disabled(resendKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSavingKey)
+        } header: {
+            Text("Your domains")
+        } footer: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Sending and receiving go through your Resend account. Paste a full access API key.")
+                Link("Create a key on Resend", destination: URL(string: "https://resend.com/api-keys")!)
+            }
+        }
+        .listRowBackground(Color.raised)
+    }
+
+    private var domainList: some View {
         Section {
             ForEach(domains) { domain in
                 NavigationLink {
@@ -165,23 +209,30 @@ struct SettingsView: View {
         .listRowBackground(Color.raised)
     }
 
-    private var serverSection: some View {
+    private func serverSection(_ server: ServerConnection) -> some View {
         Section {
             LabeledContent("Server") {
-                Text(model.session.server?.baseURL.host() ?? "").font(.phoneMono(14))
+                Text(server.host).font(.phoneMono(14))
             }
-            Button("Sign Out", role: .destructive) { isConfirmingSignOut = true }
+            Button("Disconnect Server", role: .destructive) { isConfirmingDisconnect = true }
                 .foregroundStyle(Color.danger)
         } footer: {
-            Text("bMail \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+            version
         }
         .listRowBackground(Color.raised)
+    }
+
+    private var version: some View {
+        Text("bMail \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
     }
 
     @ViewBuilder private var addAccount: some View {
         Menu {
             if model.session.google != nil {
                 Button("Gmail", systemImage: "envelope", action: connectGmail)
+            }
+            if model.session.server == nil {
+                Button("Address on Your Own Domain", systemImage: "at") { isSettingUpServer = true }
             }
             ForEach(domains.filter { $0.status == .verified }) { domain in
                 Button("Address on \(domain.name)", systemImage: "at") {
@@ -196,24 +247,30 @@ struct SettingsView: View {
     }
 
     private func connectGmail() {
-        guard let client = model.session.google else { return }
         isConnecting = true
         Task {
             defer { isConnecting = false }
             do {
-                let attempt = client.start()
-                let callback = try await webAuthenticationSession.authenticate(
-                    using: attempt.url,
-                    callback: .customScheme(attempt.callbackScheme),
-                    preferredBrowserSession: .ephemeral,
-                    additionalHeaderFields: [:]
-                )
-                try model.session.connectGmail(tokens: try await client.finish(attempt, callback: callback))
-                Haptics.success()
-            } catch let failure as ASWebAuthenticationSessionError where failure.code == .canceledLogin {
-                return
+                try await model.connectGmail(using: webAuthenticationSession)
             } catch {
                 fail("Couldn't connect Gmail.", error)
+            }
+        }
+    }
+
+    private func saveResendKey() {
+        let key = resendKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        isSavingKey = true
+        Task {
+            defer { isSavingKey = false }
+            do {
+                try await model.session.admin.setResendKey(key)
+                Haptics.success()
+                resendKey = ""
+                hasResend = true
+            } catch {
+                fail("Couldn't save the key.", error)
             }
         }
     }
@@ -232,14 +289,17 @@ struct SettingsView: View {
         run("Couldn't add \(name).") { try await model.session.admin.addDomain(name) }
     }
 
-    private func rename(_ label: MailLabel) {
-        let name = newLabelName.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, name != label.name else { return }
-        run("Couldn't rename \(label.name).") { try await model.session.admin.renameLabel(label.id, to: name) }
+    private func rename(_ label: String) {
+        let name = newLabelName
+        Task {
+            do { try await model.session.renameLabel(named: label, to: name) } catch { fail("Couldn't rename \(label).", error) }
+        }
     }
 
-    private func delete(_ label: MailLabel) {
-        run("Couldn't delete \(label.name).") { try await model.session.admin.deleteLabel(label.id) }
+    private func delete(_ label: String) {
+        Task {
+            do { try await model.session.deleteLabel(named: label) } catch { fail("Couldn't delete \(label).", error) }
+        }
     }
 
     private func run(_ failure: String, _ operation: @escaping () async throws -> ChangeSet) {
@@ -332,7 +392,7 @@ private struct AccountSettings: View {
         ) {
             Button(account.kind == .domain ? "Delete" : "Disconnect", role: .destructive, action: remove)
         } message: {
-            Text(account.kind == .domain ? "The address stops receiving mail. This can't be undone." : "Its mail leaves this iPhone. Gmail keeps everything.")
+            Text(account.kind == .domain ? "The address stops receiving mail. This can't be undone." : "Its mail leaves bMail. Gmail keeps everything.")
         }
     }
 

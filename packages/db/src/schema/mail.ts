@@ -26,7 +26,7 @@ import {
     type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
-import { users } from "./auth";
+import { users } from "./owner";
 
 export const domainStatus = pgEnum("domain_status", domainStatuses);
 export const folder = pgEnum("folder", folders);
@@ -238,7 +238,6 @@ export const labels = pgTable(
         id: uuid().primaryKey(),
         ...synced,
         name: text().notNull(),
-        description: text(),
         deletedAt: timestamp({ withTimezone: true }),
     },
     // Partial and case-insensitive, so `Work` and `work` can't both exist but a removed name can be used again.

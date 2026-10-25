@@ -149,8 +149,16 @@ final class ComposerModel {
 
     // MARK: - Editing
 
+    /// Tracking runs on your server, so without one the switch stays off.
+    var canTrack: Bool { app?.session.canTrack ?? false }
+
     func toggleTracking() {
+        guard canTrack else { return }
         trackingEnabled.toggle()
+    }
+
+    func openSettings() {
+        app?.openSettings()
     }
 
     func attach(_ urls: [URL]) {

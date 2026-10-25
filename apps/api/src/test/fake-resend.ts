@@ -1,6 +1,6 @@
 import type { DnsRecord } from "@repo/contracts";
 
-import { UpstreamError } from "../lib/errors";
+import { BadRequestError, UpstreamError } from "../lib/errors";
 import type { OutgoingEmail, ReceivedAttachment, ReceivedEmail, ResendGateway } from "../lib/resend";
 
 const records = (status: DnsRecord["status"]): DnsRecord[] => [
@@ -16,9 +16,13 @@ const records = (status: DnsRecord["status"]): DnsRecord[] => [
     },
 ];
 
+/** The one key the fake Resend refuses, the way Resend refuses a sending-only or revoked key. */
+export const REJECTED_KEY = "re_rejected";
+
 /** Resend as the services see it, with every call recorded. Webhook signatures are valid when they say "valid". */
 export function createFakeResend() {
     const sent: { email: OutgoingEmail; idempotencyKey: string }[] = [];
+    const webhooks: { id: string; apiKey: string; endpoint: string; signingSecret: string }[] = [];
     const inbox = new Map<string, { email: ReceivedEmail; attachments: ReceivedAttachment[] }>();
     const domainStatus = new Map<string, "pending" | "verified">();
     let nextSendError: string | null = null;
@@ -54,15 +58,32 @@ export function createFakeResend() {
         async listReceivedAttachments(id) {
             return inbox.get(id)?.attachments ?? [];
         },
-        verifyWebhook(payload, headers) {
+        async verifyWebhook(payload, headers) {
             if (headers.get("svix-signature") !== "valid") throw new Error("invalid signature");
             return JSON.parse(payload);
+        },
+        async createWebhook(apiKey, endpoint) {
+            if (apiKey === REJECTED_KEY)
+                throw new BadRequestError("Resend didn't accept that key. Use a full access key.");
+            const webhook = {
+                id: `wh_${webhooks.length + 1}`,
+                apiKey,
+                endpoint,
+                signingSecret: `whsec_${webhooks.length + 1}`,
+            };
+            webhooks.push(webhook);
+            return webhook;
+        },
+        async removeWebhook(_apiKey, id) {
+            const index = webhooks.findIndex((webhook) => webhook.id === id);
+            if (index >= 0) webhooks.splice(index, 1);
         },
     };
 
     return {
         gateway,
         sent,
+        webhooks,
         verifyDomain: (name: string) => domainStatus.set(`rd_${name}`, "verified"),
         failNextSend: (message: string) => {
             nextSendError = message;

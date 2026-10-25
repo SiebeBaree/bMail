@@ -25,16 +25,11 @@ export function labelsService(db: Database) {
             return toLabel(await repo.create({ ...input, userId }));
         },
         async update(userId: string, id: string, input: UpdateLabelInput): Promise<Label> {
-            const label = await findOrThrow(userId, id);
-            if (input.name !== undefined && (await repo.nameTaken(userId, input.name, id))) {
+            await findOrThrow(userId, id);
+            if (await repo.nameTaken(userId, input.name, id)) {
                 throw new ConflictError(`There's already a label called ${input.name}.`);
             }
-            if (input.name === undefined && input.description === undefined) return toLabel(label);
-            const row = await repo.update(userId, id, {
-                name: input.name,
-                // An empty description is no description: the label goes back to never being applied by AI.
-                description: input.description === undefined ? undefined : input.description || null,
-            });
+            const row = await repo.rename(userId, id, input.name);
             if (!row) throw new NotFoundError("That label doesn't exist anymore.");
             return toLabel(row);
         },

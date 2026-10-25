@@ -8,6 +8,7 @@ import SwiftUI
 /// Domains you own, each one set up once: DNS, where unknown addresses go and the tracking host. Addresses on them are
 /// added under Accounts.
 struct DomainsSection: View {
+    let server: ServerConnection
     var isDomainFieldFocused: FocusState<Bool>.Binding
     @Environment(AppModel.self) private var model
     @FetchAll(Domain.order(by: \.name)) private var domains
@@ -16,6 +17,8 @@ struct DomainsSection: View {
     @State private var newDomain = ""
     @State private var isAdding = false
     @State private var error: String?
+    /// Nil until the server says. A server needs your Resend key before its first domain.
+    @State private var hasResend: Bool?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,6 +26,22 @@ struct DomainsSection: View {
             if let error {
                 Text(error).foregroundStyle(Color.danger).padding(.vertical, 12)
             }
+            if hasResend == false, domains.isEmpty {
+                ResendKeyStep { hasResend = true }
+            } else {
+                domainList
+            }
+            HStack(spacing: 4) {
+                Text("Connected to \(server.host).").foregroundStyle(Color.textMuted)
+                ConfirmButton(title: "Disconnect", confirmation: "Disconnect and forget its mail") { model.session.disconnectServer() }
+            }
+            .padding(.top, 20)
+        }
+        .task(id: server.baseURL) { hasResend = try? await model.session.admin.hasResend() }
+    }
+
+    @ViewBuilder private var domainList: some View {
+        VStack(alignment: .leading, spacing: 0) {
             ForEach(domains) { domain in
                 DomainRow(
                     domain: domain,
@@ -244,5 +263,56 @@ private struct RecordTable: View {
             }
         }
         .font(.geist(12.5))
+    }
+}
+
+/// Your server sends and receives through your Resend account, so it asks for a key once, before your first domain.
+private struct ResendKeyStep: View {
+    let saved: () -> Void
+    @Environment(AppModel.self) private var model
+    @State private var key = ""
+    @State private var isSaving = false
+    @State private var error: String?
+
+    private static let apiKeys = URL(string: "https://resend.com/api-keys")!
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Sending and receiving go through your Resend account. Paste a full access API key.")
+                .foregroundStyle(Color.textMuted)
+            HStack(spacing: 8) {
+                SecureField("re_…", text: $key)
+                    .textFieldStyle(.field)
+                    .frame(width: 260)
+                    .onSubmit(save)
+                Button(isSaving ? "Saving" : "Save", action: save)
+                    .buttonStyle(.secondary)
+                    .disabled(trimmed.isEmpty || isSaving)
+            }
+            if let error {
+                Text(error).foregroundStyle(Color.danger).fixedSize(horizontal: false, vertical: true)
+            }
+            Link("Create a key on Resend", destination: Self.apiKeys)
+                .font(.geist(12))
+                .foregroundStyle(Color.link)
+        }
+        .padding(.vertical, 16)
+    }
+
+    private var trimmed: String { key.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private func save() {
+        guard !trimmed.isEmpty else { return }
+        isSaving = true
+        error = nil
+        Task {
+            defer { isSaving = false }
+            do {
+                try await model.session.admin.setResendKey(trimmed)
+                saved()
+            } catch {
+                self.error = error.localizedDescription
+            }
+        }
     }
 }

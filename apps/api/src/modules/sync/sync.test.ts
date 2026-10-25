@@ -12,7 +12,7 @@ beforeAll(async () => {
 afterAll(() => harness.close());
 beforeEach(async () => {
     await harness.reset();
-    headers = await harness.signIn();
+    headers = await harness.claim();
     await harness.seedMailbox(headers);
 });
 

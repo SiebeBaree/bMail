@@ -325,7 +325,7 @@ private struct LabelDescriptions: View {
 
     var body: some View {
         SettingsGroup("Labels") {
-            ForEach(labels) { LabelDescriptionRow(label: $0) }
+            ForEach(labels.names, id: \.self) { LabelDescriptionRow(name: $0) }
             if labels.isEmpty {
                 GroupRow("No labels yet", note: "Press L on a conversation to create one.")
             }
@@ -334,13 +334,12 @@ private struct LabelDescriptions: View {
 }
 
 private struct LabelDescriptionRow: View {
-    let label: MailLabel
+    let name: String
     @Environment(AppModel.self) private var model
     @State private var text = ""
-    @State private var error: String?
 
     var body: some View {
-        GroupRow(label.name, note: error.map { Text($0).foregroundStyle(Color.danger) }) {
+        GroupRow(name) {
             TextField("What belongs here", text: $text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .multilineTextAlignment(.trailing)
@@ -348,20 +347,14 @@ private struct LabelDescriptionRow: View {
                 .lineLimit(1...3)
                 .frame(maxWidth: 380, alignment: .trailing)
         }
-        .onAppear { text = label.description ?? "" }
-        // Saved once you stop typing, like a signature.
+        .onAppear { text = model.session.ai.labelDescriptions[name] ?? "" }
+        // Saved once you stop typing, so auto labelling doesn't run on every keystroke.
         .task(id: text) {
             let description = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard description != (label.description ?? "") else { return }
+            guard description != (model.session.ai.labelDescriptions[name] ?? "") else { return }
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
-            do {
-                try await model.session.describeLabel(label.id, as: description)
-                error = nil
-                model.session.labelNewMail()
-            } catch {
-                self.error = error.localizedDescription
-            }
+            model.session.describeLabel(named: name, as: description)
         }
     }
 }

@@ -68,7 +68,8 @@ public struct ServerProvider: MailProvider {
     /// state.
     private func pushLabels(of conversationID: Conversation.ID) async throws {
         let labelIDs = try await store.database.read { db in
-            try ConversationLabel.where { $0.conversationID.eq(conversationID) }.select(\.labelID).fetchAll(db)
+            let mine = try MailLabel.where { $0.accountID.is(nil) }.select(\.id).fetchAll(db)
+            return try ConversationLabel.where { $0.conversationID.eq(conversationID) && $0.labelID.in(mine) }.select(\.labelID).fetchAll(db)
         }
         let response = try await call {
             try await connection.client.setConversationLabels(
@@ -149,7 +150,7 @@ public struct ServerProvider: MailProvider {
         do {
             let output = try await operation()
             if let status = undocumentedStatus(output), status == 401 {
-                throw ProviderError(.unauthorized, "Sign in again to keep your domains in sync.")
+                throw ProviderError(.unauthorized, "Connect this device to your server again.")
             }
             return output
         } catch let error as ProviderError {
@@ -161,7 +162,7 @@ public struct ServerProvider: MailProvider {
 
     private func unexpected(_ output: some Any) -> ProviderError {
         if let status = undocumentedStatus(output), status == 401 {
-            return ProviderError(.unauthorized, "Sign in again to keep your domains in sync.")
+            return ProviderError(.unauthorized, "Connect this device to your server again.")
         }
         return ProviderError(.unavailable, "The server answered in a way this version doesn't understand.")
     }

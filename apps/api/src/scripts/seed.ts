@@ -2,28 +2,24 @@ import { randomUUID } from "node:crypto";
 
 import type { Address } from "@repo/contracts";
 import { conversations, createDb, domains, events, links, mailboxes, messages } from "@repo/db";
-import { env } from "@repo/env/api";
 import { eq } from "drizzle-orm";
 
-import { createAuth, setPassword } from "../auth";
+import { ownerService } from "../modules/owner";
 
 // Local development only: fills a dev database with the inbox from the design mocks, so the app has something real
 // to render without Resend. It only reads SEED_DATABASE_URL, never DATABASE_URL, so a .env pointing at production
-// can't be seeded by accident: the seeded user has a known password.
+// can't be seeded by accident. It claims the database, so run it on a fresh one.
 if (process.env.NODE_ENV !== "development") throw new Error("The seed only runs with NODE_ENV=development.");
 const seedDatabaseUrl = process.env.SEED_DATABASE_URL;
 if (!seedDatabaseUrl) throw new Error("Set SEED_DATABASE_URL to a dev database to seed it.");
 
-const OWNER = { email: env.ALLOWED_EMAILS[0] ?? "siebe@baree.be", password: "dev-password-123" };
 const db = createDb(seedDatabaseUrl);
-const auth = createAuth({
-    db,
-    baseURL: env.PUBLIC_URL,
-    secret: env.BETTER_AUTH_SECRET,
-    allowedEmails: env.ALLOWED_EMAILS,
+const owner = ownerService(db, undefined);
+const token = await owner.claim(undefined);
+const userId = await owner.userIdFor(token).then((id) => {
+    if (!id) throw new Error("The claim didn't stick.");
+    return id;
 });
-
-const userId = await setPassword(auth, OWNER.email, OWNER.password);
 
 const domainId = randomUUID();
 const siebe = randomUUID();
@@ -298,5 +294,5 @@ if (proposalId) {
     ]);
 }
 
-process.stdout.write(`Seeded. Sign in as ${OWNER.email} / ${OWNER.password}\n`);
+process.stdout.write(`Seeded. Launch bMail with -sessionToken ${token}\n`);
 process.exit(0);
