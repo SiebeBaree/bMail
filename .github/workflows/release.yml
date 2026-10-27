@@ -1,7 +1,7 @@
 name: Release
 
-# Push a tag like v0.2.0 to publish bMail 0.2.0: a signed, notarized DMG on a GitHub release. The api isn't part of
-# this; Vercel deploys it from main.
+# Push a tag like v0.2.0 to publish bMail 0.2.0: a signed, notarized DMG on a GitHub release, with the appcast.xml
+# that installed copies read to update themselves. The api isn't part of this; Vercel deploys it from main.
 on:
     push:
         tags: ["v*"]
@@ -52,13 +52,14 @@ jobs:
                   done
                   security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
 
-            # Signing happens below rather than in Xcode: the app has no frameworks to sign first, and Xcode would
-            # otherwise want a team and profile for every package target.
+            # Signing happens below rather than in Xcode, which would otherwise want a team and profile for every
+            # package target. The build number is what Sparkle compares, so it only ever goes up.
             - name: Build
               run: |
                   xcodegen generate
                   xcodebuild archive -project Mail.xcodeproj -scheme Mail -configuration Release \
                       -archivePath "$RUNNER_TEMP/bMail.xcarchive" \
+                      -clonedSourcePackagesDirPath "$RUNNER_TEMP/packages" \
                       -skipPackagePluginValidation -skipMacroValidation \
                       MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
                       CODE_SIGNING_ALLOWED=NO
@@ -83,9 +84,15 @@ jobs:
                   else
                       plutil -remove keychain-access-groups "$entitlements"
                   fi
-                  codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" \
-                      --entitlements "$entitlements" --sign "Developer ID Application" "$app"
-                  codesign --verify --strict "$app"
+                  sign() { codesign --force --options runtime --timestamp --keychain "$KEYCHAIN" --sign "Developer ID Application" "$@"; }
+                  # Inside out: Sparkle's helpers, Sparkle, then the app.
+                  sparkle="$app/Contents/Frameworks/Sparkle.framework"
+                  for helper in XPCServices/Installer.xpc XPCServices/Downloader.xpc Autoupdate Updater.app; do
+                      sign "$sparkle/Versions/B/$helper"
+                  done
+                  sign "$sparkle"
+                  sign --entitlements "$entitlements" "$app"
+                  codesign --verify --deep --strict "$app"
                   ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
                   diskutil image create from --format ULFO --volumeName bMail "$RUNNER_TEMP/dmg" "$DMG"
                   codesign --timestamp --keychain "$KEYCHAIN" --sign "Developer ID Application" "$DMG"
@@ -106,10 +113,40 @@ jobs:
                   fi
                   xcrun stapler staple "$DMG"
 
+            # Installed copies read releases/latest/download/appcast.xml, so each release carries one that points at its
+            # own DMG. Sparkle refuses a DMG whose EdDSA signature doesn't match SUPublicEDKey, so this signs the final,
+            # stapled file. The key is required: a release without an appcast would leave every copy on the old one.
+            - name: Appcast
+              env:
+                  SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+              run: |
+                  signature="$(echo "$SPARKLE_PRIVATE_KEY" | "$RUNNER_TEMP/packages/artifacts/sparkle/Sparkle/bin/sign_update" --ed-key-file - "$DMG")"
+                  info="$RUNNER_TEMP/bMail.xcarchive/Products/Applications/bMail.app/Contents/Info.plist"
+                  cat > "$RUNNER_TEMP/appcast.xml" <<EOF
+                  <?xml version="1.0" encoding="utf-8"?>
+                  <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+                      <channel>
+                          <title>bMail</title>
+                          <item>
+                              <title>bMail $VERSION</title>
+                              <pubDate>$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
+                              <sparkle:version>$GITHUB_RUN_NUMBER</sparkle:version>
+                              <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
+                              <sparkle:minimumSystemVersion>$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$info")</sparkle:minimumSystemVersion>
+                              <sparkle:fullReleaseNotesLink>https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME</sparkle:fullReleaseNotesLink>
+                              <enclosure url="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/bMail-$VERSION.dmg" type="application/octet-stream" $signature />
+                          </item>
+                      </channel>
+                  </rss>
+                  EOF
+                  cat "$RUNNER_TEMP/appcast.xml"
+
             - name: Publish
               env:
                   GH_TOKEN: ${{ github.token }}
-              run: gh release create "$GITHUB_REF_NAME" "$DMG" --verify-tag --title "bMail $VERSION" --generate-notes
+              run: |
+                  gh release create "$GITHUB_REF_NAME" "$DMG" "$RUNNER_TEMP/appcast.xml" \
+                      --verify-tag --title "bMail $VERSION" --generate-notes
 
             - name: Remove the signing keychain
               if: always()

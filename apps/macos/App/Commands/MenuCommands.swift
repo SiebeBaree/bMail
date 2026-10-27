@@ -1,5 +1,6 @@
 import MailUI
 import SwiftUI
+import Updates
 
 /// The menu bar. Every command is here so it can be found by browsing; single-key shortcuts are shown in the palette
 /// and the shortcut sheet because AppKit menus can't show a key without a modifier.
@@ -7,6 +8,9 @@ struct MenuCommands: Commands {
     let model: AppModel
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { model.updater.check() }
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Message") { model.perform(.compose) }
                 .keyboardShortcut("n")

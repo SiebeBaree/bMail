@@ -32,6 +32,15 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: be.baree.mail
             CFBundleURLSchemes: [bmail]
+        # Sparkle. The release workflow attaches appcast.xml to every release and signs the DMG with the private half
+        # of this key (the SPARKLE_PRIVATE_KEY secret). Checks hourly and downloads on its own; see Updater.
+        SUFeedURL: https://github.com/SiebeBaree/bMail/releases/latest/download/appcast.xml
+        SUPublicEDKey: GS/PvKaOJhU7NgtTF3OvJwhLL9tcJ5Gf9WG+m4GPoJA=
+        SUEnableAutomaticChecks: true
+        SUAutomaticallyUpdate: true
+        SUScheduledCheckInterval: 3600
+        # The sandbox can't replace the app, so Sparkle installs through its XPC service.
+        SUEnableInstallerLauncherService: true
     dependencies:
       - package: MailKit
         product: DesignSystem
@@ -45,6 +54,8 @@ targets:
         product: MailUI
       - package: MailKit
         product: Agents
+      - package: MailKit
+        product: Updates
     settings:
       base:
         PRODUCT_NAME: bMail

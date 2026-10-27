@@ -31,5 +31,17 @@
 	<string>1</string>
 	<key>GoogleClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
+	<key>SUAutomaticallyUpdate</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/SiebeBaree/bMail/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>GS/PvKaOJhU7NgtTF3OvJwhLL9tcJ5Gf9WG+m4GPoJA=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>3600</integer>
 </dict>
 </plist>

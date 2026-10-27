@@ -8,6 +8,7 @@ import MailUI
 import Observation
 import OSLog
 import SwiftUI
+import Updates
 
 private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands")
 
@@ -18,6 +19,7 @@ private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands"
 final class AppModel {
     let session = MailSession(google: BuildSettings.google)
     let agents: AgentServer
+    let updater: Updater
     @ObservationIgnored private let notifications = AgentNotifications()
     /// Messages agents wrote at Ask to send, oldest first. The first opens in the composer as soon as it's free.
     @ObservationIgnored private var agentDrafts: [AgentDraft] = []
@@ -78,6 +80,8 @@ final class AppModel {
     init() {
         Typography.register()
         agents = AgentServer(session: session)
+        updater = Updater(toasts: session.toasts)
+        updater.start()
         agents.review = { [weak self] draft in self?.review(draft) }
         notifications.send = { [weak self] id in self?.sendDraft(id) }
         keyboard = KeyboardRouter(

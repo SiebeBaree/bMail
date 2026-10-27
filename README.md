@@ -54,6 +54,8 @@ open Mail.xcodeproj
 
 Each app's `project.yml` is the source of truth for its Xcode project. Before building, set `DEVELOPMENT_TEAM` to your own team and `PRODUCT_BUNDLE_IDENTIFIER` to a bundle id you own, the same one in both. Gmail needs an iOS-type Google OAuth client for that bundle id. Put its id in `GOOGLE_CLIENT_ID` in both `project.yml` files.
 
+Release builds of the Mac app update themselves from this repository's releases. To ship your own, point `SUFeedURL` in `apps/macos/project.yml` at your repository, put the public key from Sparkle's `generate_keys` in `SUPublicEDKey` and the private one in your repository's `SPARKLE_PRIVATE_KEY` secret.
+
 ## Develop
 
 [AGENTS.md](AGENTS.md) explains how the code is laid out and how to run the app against a local api. Before you finish a change, run `pnpm typecheck && pnpm lint && pnpm test && pnpm format` at the root, and `swift test` in `apps/macos/MailKit` for app changes.
