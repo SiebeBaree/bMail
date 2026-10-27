@@ -6,13 +6,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 /// Writing a message, as a full-height sheet. Cc, Bcc and From stay folded until you need them, the quoted message
-/// stays folded under what you write, and closing asks first when there's something to lose.
+/// stays folded under what you write, and closing one with something in it leaves an Undo.
 struct ComposerView: View {
     @Bindable var model: ComposerModel
     @Environment(\.fontResolutionContext) private var fontContext
     @FocusState private var focus: Field?
     @State private var recipientFocus: ComposerModel.RecipientKind?
-    @State private var isConfirmingDiscard = false
     @State private var isPickingPhotos = false
     @State private var isImportingFiles = false
     @State private var photos: [PhotosPickerItem] = []
@@ -74,10 +73,6 @@ struct ComposerView: View {
             .toolbar { toolbar }
         }
         .interactiveDismissDisabled(model.hasContent)
-        .confirmationDialog("Discard this message?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
-            Button("Discard", role: .destructive) { model.close() }
-            Button("Keep Writing", role: .cancel) {}
-        }
         .photosPicker(isPresented: $isPickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), photoLibrary: .shared())
         .fileImporter(isPresented: $isImportingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case let .success(urls) = result { model.attach(urls) }
@@ -96,9 +91,7 @@ struct ComposerView: View {
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button(role: .cancel) {
-                if model.hasContent { isConfirmingDiscard = true } else { model.close() }
-            }
+            Button(role: .cancel) { model.close() }
         }
         ToolbarItem(placement: .confirmationAction) {
             Button {
@@ -130,7 +123,7 @@ struct ComposerView: View {
     /// Attachments and tracking, above the keyboard while typing and along the bottom otherwise.
     @ViewBuilder private var extras: some View {
         Menu {
-            Button("Photo Library", systemImage: "photo.on.rectangle") { isPickingPhotos = true }
+            Button("Photo library", systemImage: "photo.on.rectangle") { isPickingPhotos = true }
             Button("Files", systemImage: "folder") { isImportingFiles = true }
         } label: {
             Image(systemName: "paperclip")
@@ -139,7 +132,7 @@ struct ComposerView: View {
         Button {
             model.toggleTracking()
         } label: {
-            Image(systemName: "waveform.path.ecg")
+            Image(systemName: model.trackingEnabled ? "waveform.path.ecg.rectangle.fill" : "waveform.path.ecg.rectangle")
                 .foregroundStyle(model.trackingEnabled ? Color.accent : Color.textPrimary)
         }
         .accessibilityLabel(model.trackingEnabled ? "Stop tracking opens and clicks" : "Track opens and clicks")
@@ -182,7 +175,7 @@ struct ComposerView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(model.account?.address ?? "Choose an account").lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                    Image(systemName: "chevron.up.chevron.down").font(.phone(11, .semibold, relativeTo: .caption2))
                 }
                 .font(.phone(16))
                 .foregroundStyle(Color.textPrimary)
@@ -238,7 +231,7 @@ struct ComposerView: View {
                         Button {
                             withAnimation(.snappy) { model.attachments.removeAll { $0.id == file.id } }
                         } label: {
-                            Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Color.textFaint)
+                            Image(systemName: "xmark.circle.fill").font(.phone(18)).foregroundStyle(Color.textFaint)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Remove \(file.filename)")

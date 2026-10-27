@@ -126,7 +126,7 @@ private struct Token: View {
     var body: some View {
         Menu {
             Section(address.email) {
-                Button("Copy Address", systemImage: "doc.on.doc") { UIPasteboard.general.string = address.email }
+                Button("Copy address", systemImage: "doc.on.doc") { UIPasteboard.general.string = address.email }
                 Button("Remove", systemImage: "xmark", role: .destructive, action: remove)
             }
         } label: {

@@ -28,10 +28,10 @@ struct ConversationRow: View {
                 }
                 Spacer(minLength: 8)
                 if conversation.isStarred {
-                    Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(Color.warning)
+                    Image(systemName: "star.fill").font(.smallIcon).foregroundStyle(Color.warning)
                 }
                 if conversation.hasAttachments {
-                    Image(systemName: "paperclip").font(.system(size: 10)).foregroundStyle(Color.textMuted)
+                    Image(systemName: "paperclip").font(.smallIcon).foregroundStyle(Color.textMuted)
                 }
                 if !labels.isEmpty {
                     Text(labels.joined(separator: " · ")).font(.geist(11.5)).foregroundStyle(Color.textSecondary).lineLimit(1)
@@ -60,7 +60,7 @@ struct ConversationRow: View {
             if isChecked || isPicking || isHovered {
                 Button(action: toggleCheck) {
                     Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 13))
+                        .font(.rowIcon)
                         .foregroundStyle(isChecked ? Color.accent : Color.textFaint)
                         .frame(width: 30, height: 40)
                         .contentShape(.rect)

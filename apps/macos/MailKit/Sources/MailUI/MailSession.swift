@@ -259,6 +259,9 @@ public final class MailSession {
         }
     }
 
+    /// Whether `undo()` has an earlier change to take back.
+    public var canUndo: Bool { !undoStack.isEmpty }
+
     /// Takes back the last action. False when there's nothing left to undo.
     @discardableResult
     public func undo() -> Bool {

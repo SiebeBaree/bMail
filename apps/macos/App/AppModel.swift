@@ -193,13 +193,15 @@ final class AppModel {
     private func back() -> Bool {
         if isPaletteOpen { isPaletteOpen = false } else if isShortcutsOpen { isShortcutsOpen = false } else if isLabelPickerOpen {
             isLabelPickerOpen = false
+        } else if composer?.isSuggestingRecipients == true {
+            composer?.isSuggestingRecipients = false
         } else if composer?.text.dismissSuggestion() == true {
-            // Esc takes the suggestion away first, and only then the composer.
+            // Esc takes the suggestions away first, and only then the composer.
         } else if composer != nil {
             composer?.close()
         } else if !checked.isEmpty {
             checked = []
-        } else if searchResults != nil {
+        } else if searchResults != nil || isSearchFocused {
             searchText = ""
             isSearchFocused = false
         } else { return false }
@@ -257,6 +259,15 @@ final class AppModel {
 
     // MARK: - Sending
 
+    /// Closes the composer. One with something in it comes back with Undo, exactly as it was.
+    func discard(_ discarded: ComposerModel) {
+        if composer === discarded { composer = nil }
+        guard discarded.hasContent else { return }
+        session.toasts.show(Toast("Discarded", symbol: "trash", action: .init("Undo", key: "Z") { [weak self] in
+            self?.composer = discarded
+        }))
+    }
+
     /// Undo brings back the composer the message came from, exactly as it was.
     func send(_ message: OutgoingMessage, from composer: ComposerModel) {
         session.send(message) { [weak self] in self?.composer = composer }
@@ -297,13 +308,18 @@ final class AppModel {
         session.toasts.show(Toast("Downloading \(attachment.filename)", symbol: "arrow.down.circle", duration: .seconds(3)))
         Task {
             do {
-                let destination = URL.downloadsDirectory.appending(path: attachment.savedName, directoryHint: .notDirectory)
+                let destination = attachment.freeURL(in: .downloadsDirectory)
                 try await session.download(attachment, of: message).write(to: destination, options: .atomic)
                 NSWorkspace.shared.open(destination)
             } catch {
                 session.toasts.show(Toast("Couldn't open \(attachment.filename).", detail: error.localizedDescription, symbol: "exclamationmark.triangle", tone: .failure))
             }
         }
+    }
+
+    /// Whether Z has anything to take back: a toast's Undo or an earlier change.
+    var canUndo: Bool {
+        session.toasts.toasts.contains { $0.action?.key == "Z" } || session.canUndo
     }
 
     // MARK: - Reading

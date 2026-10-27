@@ -77,17 +77,18 @@ final class ComposerModel: Identifiable {
 
     var title: String {
         switch mode {
-        case .new: "New Message"
+        case .new: "New message"
         case .response(.forward): "Forward"
         case .response: "Reply"
         }
     }
 
-    /// Whether closing would lose something you did, so it asks first.
+    /// Whether closing would lose something you did, so closing leaves an Undo.
     var hasContent: Bool {
         let signature = accountID.map(Signatures.text(for:)) ?? ""
         let written = String(text.body.characters).trimmingCharacters(in: .whitespacesAndNewlines)
         let typed = !written.isEmpty && written != signature
+            || pending.values.contains { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         if case .new = mode {
             return typed || !to.isEmpty || !cc.isEmpty || !bcc.isEmpty || !subject.isEmpty || !attachments.isEmpty
         }
@@ -166,7 +167,7 @@ final class ComposerModel: Identifiable {
     }
 
     func close() {
-        app?.sheet = nil
+        app?.discard(self)
     }
 
     // MARK: - Sending

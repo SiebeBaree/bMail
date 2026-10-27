@@ -24,10 +24,10 @@ struct ActivityView: View {
                     count(clicks.count, "click")
                     Spacer(minLength: 0)
                     if let lastActivity {
-                        Text(MailDate.short(lastActivity.occurredAt)).font(.phoneMono(13)).foregroundStyle(Color.textMuted)
+                        Text(MailDate.event(lastActivity.occurredAt)).font(.phoneMono(13)).foregroundStyle(Color.textMuted)
                     }
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.phone(11, .semibold, relativeTo: .caption2))
                         .foregroundStyle(Color.textMuted)
                         .rotationEffect(.degrees(showsEvents ? 180 : 0))
                 }
@@ -81,7 +81,7 @@ private struct EventRow: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(event.kind.title).font(.phone(15, .medium))
                     Spacer(minLength: 8)
-                    Text(time).font(.phoneMono(12))
+                    Text(MailDate.event(event.occurredAt)).font(.phoneMono(12))
                 }
                 if !event.summary.isEmpty {
                     Text(event.summary).font(.phone(13)).lineLimit(2)
@@ -91,10 +91,6 @@ private struct EventRow: View {
         .foregroundStyle(event.isReader ? Color.textSecondary : Color.textFaint)
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
-    }
-
-    private var time: String {
-        "\(event.occurredAt.formatted(.dateTime.weekday(.abbreviated))) \(event.occurredAt.formatted(date: .omitted, time: .shortened))"
     }
 }
 

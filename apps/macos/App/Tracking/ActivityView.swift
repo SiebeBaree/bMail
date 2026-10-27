@@ -25,14 +25,14 @@ struct ActivityView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 28) {
                 if let delivered = events.last(where: { $0.kind == .delivered }) {
-                    Label { Text("Delivered \(MailDate.short(delivered.occurredAt))") } icon: { StatusDot(.success) }
+                    Label { Text("Delivered \(MailDate.event(delivered.occurredAt))") } icon: { StatusDot(.success) }
                 }
                 if message.trackingEnabled {
                     count(opens.count, "open")
                     count(clicks.count, "click")
                     if let lastActivity {
                         Text("Last activity ") .foregroundStyle(Color.textMuted)
-                            + Text(MailDate.short(lastActivity.occurredAt)).foregroundStyle(Color.textPrimary)
+                            + Text(MailDate.event(lastActivity.occurredAt)).foregroundStyle(Color.textPrimary)
                     }
                 }
                 Spacer()
@@ -121,7 +121,7 @@ private struct Timeline: View {
                         }
                     }
                     .frame(width: 8, height: 8)
-                    Text("\(event.occurredAt.formatted(.dateTime.weekday(.abbreviated))) \(event.occurredAt.formatted(date: .omitted, time: .shortened))")
+                    Text(MailDate.event(event.occurredAt))
                         .font(.meta)
                         .frame(width: 96, alignment: .leading)
                     Text(event.kind.title)

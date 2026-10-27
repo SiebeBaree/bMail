@@ -54,7 +54,7 @@ struct ReaderView: View {
         ToolbarItemGroup(placement: .bottomBar) {
             let restores = conversation.map { $0.folder != .inbox } ?? false
             Button { triage(restores ? .inbox : .done) } label: {
-                Image(systemName: restores ? "tray.and.arrow.down" : "checkmark")
+                Image(systemName: restores ? "tray.and.arrow.down" : MailTab.done.symbol)
             }
             .accessibilityLabel(restores ? "Move to inbox" : "Mark as done")
             if conversation?.folder != .trash {
@@ -72,7 +72,7 @@ struct ReaderView: View {
         ToolbarItemGroup(placement: .bottomBar) {
             Menu {
                 Button("Reply", systemImage: "arrowshape.turn.up.left") { model.respond(to: current, .reply) }
-                Button("Reply All", systemImage: "arrowshape.turn.up.left.2") { model.respond(to: current, .replyAll) }
+                Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { model.respond(to: current, .replyAll) }
                 Button("Forward", systemImage: "arrowshape.turn.up.right") { model.respond(to: current, .forward) }
             } label: {
                 Image(systemName: "arrowshape.turn.up.left")
@@ -120,7 +120,7 @@ private struct ReaderMenu: View {
 
     var body: some View {
         let id = conversation.id
-        Button(conversation.isRead ? "Mark as Unread" : "Mark as Read", systemImage: conversation.isRead ? "envelope.badge" : "envelope.open") {
+        Button(conversation.isRead ? "Mark as unread" : "Mark as read", systemImage: conversation.isRead ? "envelope.badge" : "envelope.open") {
             model.toggleRead([id])
         }
         Button("Label", systemImage: "tag") { model.label([id]) }
@@ -129,9 +129,9 @@ private struct ReaderMenu: View {
         }
         Divider()
         if conversation.folder == .spam {
-            Button("Not Spam", systemImage: "tray.and.arrow.down") { triage(.inbox) }
+            Button("Not spam", systemImage: "tray.and.arrow.down") { triage(.inbox) }
         } else {
-            Button("Report Spam", systemImage: "exclamationmark.octagon") { triage(.spam) }
+            Button("Report spam", systemImage: "exclamationmark.octagon") { triage(.spam) }
         }
     }
 }

@@ -29,7 +29,7 @@ struct DomainSettings: View {
                             Text(domain.status.label)
                         }
                     }
-                    Button(isChecking ? "Checking DNS" : "Check DNS Now", action: verify)
+                    Button(isChecking ? "Checking DNS" : "Check DNS now", action: verify)
                         .disabled(isChecking)
                 }
                 .listRowBackground(Color.raised)
@@ -38,8 +38,8 @@ struct DomainSettings: View {
                     ForEach(domain.records, id: \.self) { record in
                         RecordRow(record: record) { copy(record.value, "Value") }
                             .contextMenu {
-                                Button("Copy Name", systemImage: "doc.on.doc") { copy(record.name, "Name") }
-                                Button("Copy Value", systemImage: "doc.on.doc") { copy(record.value, "Value") }
+                                Button("Copy name", systemImage: "doc.on.doc") { copy(record.name, "Name") }
+                                Button("Copy value", systemImage: "doc.on.doc") { copy(record.value, "Value") }
                             }
                     }
                 } header: {
@@ -70,7 +70,7 @@ struct DomainSettings: View {
                 .listRowBackground(Color.raised)
 
                 Section {
-                    Button("Remove Domain", role: .destructive) { isConfirmingRemoval = true }
+                    Button("Remove domain", role: .destructive) { isConfirmingRemoval = true }
                         .foregroundStyle(Color.danger)
                 } footer: {
                     Text(mailboxes.count == 1 ? "Deletes its 1 address and all its mail." : "Deletes its \(mailboxes.count) addresses and all their mail.")

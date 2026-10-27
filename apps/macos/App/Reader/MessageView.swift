@@ -94,7 +94,7 @@ private struct AttachmentList: View {
             ForEach(message.listedAttachments) { file in
                 Button { model.open(file, of: message) } label: {
                     HStack(spacing: 8) {
-                    Image(systemName: "doc").font(.system(size: 12)).foregroundStyle(Color.textMuted)
+                    Image(systemName: "doc").font(.icon).foregroundStyle(Color.textMuted)
                     Text(file.filename).lineLimit(1)
                         Text(ByteCountFormatter.string(fromByteCount: Int64(file.size), countStyle: .file))
                             .font(.meta)

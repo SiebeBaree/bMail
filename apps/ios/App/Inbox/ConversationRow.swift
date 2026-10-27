@@ -31,10 +31,10 @@ struct ConversationRow: View {
                     }
                     Spacer(minLength: 6)
                     if conversation.isStarred {
-                        Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(Color.warning)
+                        Image(systemName: "star.fill").font(.phone(11, relativeTo: .caption2)).foregroundStyle(Color.warning)
                     }
                     if conversation.hasAttachments {
-                        Image(systemName: "paperclip").font(.system(size: 12)).foregroundStyle(Color.textMuted)
+                        Image(systemName: "paperclip").font(.phone(12, relativeTo: .caption)).foregroundStyle(Color.textMuted)
                     }
                     Text(MailDate.short(showsSentTime ? conversation.lastOutboundAt ?? conversation.lastMessageAt : conversation.lastMessageAt))
                         .font(.phoneMono(13))

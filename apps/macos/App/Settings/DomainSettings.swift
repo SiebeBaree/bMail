@@ -112,7 +112,7 @@ private struct DomainRow: View {
             Button(action: toggle) {
                 HStack(spacing: 10) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.controlIcon)
                         .foregroundStyle(Color.textMuted)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .frame(width: 12)
@@ -147,7 +147,7 @@ private struct DomainRow: View {
                         Button { isCatchAllOpen.toggle() } label: {
                             HStack(spacing: 8) {
                                 Text(mailboxes.first { $0.id == domain.catchAllMailboxID }?.address ?? "Off")
-                                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+                                Image(systemName: "chevron.down").font(.controlIcon).foregroundStyle(Color.textMuted)
                             }
                         }
                         .buttonStyle(.secondary)
@@ -189,7 +189,7 @@ private struct DomainRow: View {
                 Text(title)
                 Spacer(minLength: 16)
                 if domain.catchAllMailboxID == id {
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "checkmark").font(.controlIcon)
                 }
             }
         }
@@ -254,7 +254,7 @@ private struct RecordTable: View {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(record.value, forType: .string)
                     } label: {
-                        Image(systemName: "doc.on.doc").font(.system(size: 11))
+                        Image(systemName: "doc.on.doc").font(.smallIcon)
                     }
                     .buttonStyle(.ghost)
                     .help("Copy value")

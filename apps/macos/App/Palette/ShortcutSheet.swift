@@ -44,9 +44,8 @@ struct ShortcutSheet: View {
 
     private func commands(in group: Command.Group) -> [Command] {
         Command.allCases.filter { command in
-            guard command.group == group else { return false }
+            guard command.group == group, !command.keys.isEmpty else { return false }
             if case let .account(number) = command { return number == 1 }
-            if case let .go(tab) = command { return MailTab.visible.contains(tab) }
             return true
         }
     }

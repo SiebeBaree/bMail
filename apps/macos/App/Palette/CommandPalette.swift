@@ -75,11 +75,18 @@ struct CommandPalette: View {
         let commands = Command.allCases
             .filter(\.isInPalette)
             .filter { !$0.needsConversation || model.selection != nil }
+            .filter { $0 != .undo || model.canUndo }
             .map(PaletteItem.command)
         let accounts = model.session.accounts.map(PaletteItem.account)
         let labels = ((try? model.session.store.database.read { db in try MailLabel.order(by: \.name).fetchAll(db) }) ?? []).names.map(PaletteItem.label)
         let conversations: [PaletteItem] = query.count < 2 ? [] : conversationMatches.map(PaletteItem.conversation)
 
+        guard !query.isEmpty else {
+            // Nothing typed: what you run most first, then the keymap's order, so the list holds still.
+            return (commands + accounts + labels).enumerated()
+                .sorted { (usage[$0.element.id] ?? 0, -$0.offset) > (usage[$1.element.id] ?? 0, -$1.offset) }
+                .map(\.element)
+        }
         let scored = (commands + accounts + labels).compactMap { item -> (PaletteItem, Double)? in
             guard let score = FuzzyMatch.score(query, in: item.title) else { return nil }
             // Usage lifts what you run often; among equals the shorter title wins, so "rep" lands on Reply.
@@ -148,7 +155,7 @@ private struct PaletteRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 13))
+                .font(.rowIcon)
                 .frame(width: 18)
                 .foregroundStyle(isHighlighted ? Color.textPrimary : Color.textMuted)
             FuzzyMatch.highlighted(item.title, query: query)

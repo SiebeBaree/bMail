@@ -75,7 +75,7 @@ private struct PickedConversations: View {
                 ForEach([Command.markDone, .trash, .spam, .toggleStar, .toggleRead, .label, .checkAll], id: \.self) { command in
                     Button { model.perform(command) } label: {
                         HStack(spacing: 10) {
-                            Image(systemName: command.symbol).font(.system(size: 12)).frame(width: 18)
+                            Image(systemName: command.symbol).font(.icon).frame(width: 18)
                             Text(command == .markDone && model.tab == .done ? "Move to inbox" : command.title)
                             Spacer()
                             HStack(spacing: 4) { ForEach(command.keys, id: \.self) { KeyCap($0) } }

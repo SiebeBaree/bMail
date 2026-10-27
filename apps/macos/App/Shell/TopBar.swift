@@ -66,7 +66,7 @@ private struct AccountSwitcher: View {
                 Text(current?.address ?? "All accounts")
                     .font(.uiMedium)
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.controlIcon)
                     .foregroundStyle(Color.textMuted)
             }
             .padding(.horizontal, 6)
@@ -88,7 +88,7 @@ private struct AccountSwitcher: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.controlIcon)
                         .frame(width: 20, height: 20)
                     Text("Add account")
                 }
@@ -113,7 +113,7 @@ private struct AccountSwitcher: View {
                 }
                 Spacer(minLength: 16)
                 if account?.id == model.accountFilter {
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                    Image(systemName: "checkmark").font(.controlIcon)
                 }
                 if let key { KeyCap(key) }
             }
@@ -140,7 +140,7 @@ private struct AccountMark: View {
             Avatar(account.displayName, size: 20)
         } else {
             Image(systemName: "square.stack")
-                .font(.system(size: 10, weight: .medium))
+                .font(.controlIcon)
                 .foregroundStyle(Color.textSecondary)
                 .frame(width: 20, height: 20)
                 .background(Color.selected, in: .circle)
@@ -156,7 +156,7 @@ private struct SearchField: View {
         @Bindable var model = model
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .font(.icon)
                 .foregroundStyle(Color.textMuted)
             TextField("Search mail", text: $model.searchText)
                 .textFieldStyle(.plain)
@@ -178,9 +178,7 @@ private struct SearchField: View {
         .frame(width: 280, height: Metrics.controlHeight)
         .background(Color.canvas, in: .rect(cornerRadius: Metrics.controlRadius))
         .overlay(RoundedRectangle(cornerRadius: Metrics.controlRadius).strokeBorder(isFocused ? Color.textMuted : Color.line))
-        .onChange(of: model.isSearchFocused) { _, focus in
-            if focus { isFocused = true }
-        }
+        .onChange(of: model.isSearchFocused) { _, focus in isFocused = focus }
         .onChange(of: isFocused) { _, focused in model.isSearchFocused = focused }
     }
 }

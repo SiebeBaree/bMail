@@ -17,7 +17,7 @@ export type Composer = {
 export type Toast = {
     id: number;
     title: string;
-    icon: "check" | "star" | "undo" | "send";
+    icon: "check" | "star" | "undo" | "send" | "trash";
     /** Shows Undo with its Z key. */
     undoable?: boolean;
     /** For "Sending in 10s": when the countdown ends. */
@@ -25,7 +25,7 @@ export type Toast = {
 };
 
 /** What Z restores. A send also brings its draft back. */
-type Snapshot = { conversations: Conversation[]; selection: string | null; composer?: Composer };
+type Snapshot = { conversations: Conversation[]; selection: string | null; composer?: Composer; sent?: boolean };
 
 export type State = {
     conversations: Conversation[];
@@ -185,7 +185,7 @@ export function reducer(state: State, action: Action): State {
                 history: state.history.slice(0, -1),
                 toasts: withToast(
                     { ...state, toasts: state.toasts.filter((t) => t !== state.toasts.findLast((u) => u.undoable)) },
-                    { title: previous.composer ? "Unsent" : "Undone", icon: "undo" },
+                    { title: previous.sent ? "Unsent" : "Undone", icon: "undo" },
                 ),
             };
         }
@@ -212,8 +212,21 @@ export function reducer(state: State, action: Action): State {
         }
         case "draft":
             return state.composer ? { ...state, composer: { ...state.composer, ...action.patch } } : state;
-        case "discard":
-            return { ...state, composer: null };
+        case "discard": {
+            const draft = state.composer;
+            if (!draft) return state;
+            // Like the app: a composer with something typed comes back with Undo.
+            const typed =
+                draft.body.trim() !== "" ||
+                (draft.mode === "new" && (draft.to.trim() !== "" || draft.subject.trim() !== ""));
+            if (!typed) return { ...state, composer: null };
+            return {
+                ...state,
+                composer: null,
+                history: [...state.history, { ...snapshot(state), composer: draft }],
+                toasts: withToast(state, { title: "Discarded", icon: "trash", undoable: true }),
+            };
+        }
         case "send": {
             const draft = state.composer;
             if (!draft) return state;
@@ -254,7 +267,7 @@ export function reducer(state: State, action: Action): State {
                 conversations,
                 composer: null,
                 selection: reply ?? state.selection,
-                history: [...state.history, { ...snapshot(state), composer: draft }],
+                history: [...state.history, { ...snapshot(state), composer: draft, sent: true }],
                 toasts: withToast(state, {
                     title: "Sending in",
                     icon: "send",

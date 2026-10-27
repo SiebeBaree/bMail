@@ -51,7 +51,7 @@ private struct AgentAccessRow: View {
             Button { isOpen.toggle() } label: {
                 HStack(spacing: 6) {
                     Text(access.title)
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+                    Image(systemName: "chevron.down").font(.controlIcon).foregroundStyle(Color.textMuted)
                 }
             }
             .buttonStyle(.secondary)
@@ -71,7 +71,7 @@ private struct AgentAccessRow: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.controlIcon)
                         .opacity(level == access ? 1 : 0)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(level.title)
@@ -124,7 +124,7 @@ private struct AgentConnection: View {
                 Button { isOpen.toggle() } label: {
                     HStack(spacing: 6) {
                         Text(client.rawValue)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+                        Image(systemName: "chevron.down").font(.controlIcon).foregroundStyle(Color.textMuted)
                     }
                 }
                 .buttonStyle(.secondary)

@@ -8,16 +8,16 @@ struct MenuCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("New Message") { model.perform(.compose) }
+            Button("New message") { model.perform(.compose) }
                 .keyboardShortcut("n")
         }
         CommandGroup(after: .sidebar) {
-            Button("Command Palette") { model.perform(.palette) }
+            Button("Command palette") { model.perform(.palette) }
                 .keyboardShortcut("k")
             Button("Search") { model.perform(.search) }
                 .keyboardShortcut("f")
             Divider()
-            Button("All Accounts") { model.perform(.allAccounts) }
+            Button("All accounts") { model.perform(.allAccounts) }
                 .keyboardShortcut("0")
             ForEach(Array(model.session.accounts.prefix(9).enumerated()), id: \.element.id) { index, account in
                 Button(account.address) { model.perform(.account(index + 1)) }
@@ -35,7 +35,7 @@ struct MenuCommands: Commands {
             }
         }
         CommandGroup(replacing: .help) {
-            Button("Keyboard Shortcuts") { model.perform(.shortcuts) }
+            Button("Keyboard shortcuts") { model.perform(.shortcuts) }
                 .keyboardShortcut("/")
         }
     }

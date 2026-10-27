@@ -19,8 +19,9 @@ struct AISettingsView: View {
         List {
             Section {
                 Picker("Provider", selection: $ai.provider) {
+                    // Text only: a logo here has no size to keep to and draws huge behind the row.
                     ForEach(AIProvider.allCases, id: \.self) { provider in
-                        Label { Text(provider.title) } icon: { provider.logo.image }.tag(provider)
+                        Text(provider.title).tag(provider)
                     }
                 }
                 SecureField("API key", text: $ai.key)

@@ -203,7 +203,7 @@ private struct ConversationList: View {
         }
         if editMode.isEditing {
             ToolbarItem(placement: .topBarLeading) {
-                Button(picked.count == query.conversations.count ? "Deselect All" : "Select All") {
+                Button(picked.count == query.conversations.count ? "Deselect all" : "Select all") {
                     picked = picked.count == query.conversations.count ? [] : Set(query.conversations.map(\.id))
                 }
             }
@@ -245,7 +245,7 @@ private struct PickedActions: View {
     var body: some View {
         let restores = mailbox == .tab(.done) || mailbox == .tab(.spam) || mailbox == .tab(.trash)
         Button { act { model.move(picked, to: restores ? .inbox : .done) } } label: {
-            Image(systemName: restores ? "tray.and.arrow.down" : "checkmark")
+            Image(systemName: restores ? "tray.and.arrow.down" : MailTab.done.symbol)
         }
         .accessibilityLabel(restores ? "Move to inbox" : "Mark as done")
         Button { act { model.move(picked, to: .trash) } } label: { Image(systemName: "trash") }
@@ -281,29 +281,29 @@ struct ConversationMenu: View {
         let id = conversation.id
         Section {
             Button("Reply", systemImage: "arrowshape.turn.up.left") { model.respond(to: id, .reply) }
-            Button("Reply All", systemImage: "arrowshape.turn.up.left.2") { model.respond(to: id, .replyAll) }
+            Button("Reply all", systemImage: "arrowshape.turn.up.left.2") { model.respond(to: id, .replyAll) }
             Button("Forward", systemImage: "arrowshape.turn.up.right") { model.respond(to: id, .forward) }
         }
         Section {
             if conversation.folder == .inbox {
-                Button("Mark as Done", systemImage: "checkmark") { model.move([id], to: .done) }
+                Button("Mark as done", systemImage: MailTab.done.symbol) { model.move([id], to: .done) }
             } else {
-                Button("Move to Inbox", systemImage: "tray.and.arrow.down") { model.move([id], to: .inbox) }
+                Button("Move to inbox", systemImage: "tray.and.arrow.down") { model.move([id], to: .inbox) }
             }
             Button(conversation.isStarred ? "Unstar" : "Star", systemImage: conversation.isStarred ? "star.slash" : "star") {
                 model.toggleStar([id])
             }
-            Button(conversation.isRead ? "Mark as Unread" : "Mark as Read", systemImage: conversation.isRead ? "envelope.badge" : "envelope.open") {
+            Button(conversation.isRead ? "Mark as unread" : "Mark as read", systemImage: conversation.isRead ? "envelope.badge" : "envelope.open") {
                 model.toggleRead([id])
             }
             Button("Label", systemImage: "tag") { model.label([id]) }
         }
         Section {
             if conversation.folder != .spam {
-                Button("Report Spam", systemImage: "exclamationmark.octagon") { model.move([id], to: .spam) }
+                Button("Report spam", systemImage: "exclamationmark.octagon") { model.move([id], to: .spam) }
             }
             if conversation.folder != .trash {
-                Button("Move to Trash", systemImage: "trash", role: .destructive) { model.move([id], to: .trash) }
+                Button("Move to trash", systemImage: "trash", role: .destructive) { model.move([id], to: .trash) }
             }
         }
     }
@@ -314,6 +314,8 @@ private struct TitleMenu: View {
     let title: String
     let isLarge: Bool
     let isEnabled: Bool
+    @Environment(AppModel.self) private var model
+    @FetchOne(Conversation.unreadInInbox(accountID: nil).count()) private var unread = 0
 
     var body: some View {
         if isEnabled {
@@ -322,14 +324,21 @@ private struct TitleMenu: View {
             } label: {
                 HStack(alignment: .firstTextBaseline, spacing: isLarge ? 8 : 4) {
                     label
+                    // The unread count in mono, like the Mac's Inbox tab.
+                    if model.mailbox == .tab(.inbox), model.searchResults == nil, unread > 0 {
+                        Text("\(unread)")
+                            .font(.phoneMono(isLarge ? 20 : 13, relativeTo: isLarge ? .title3 : .footnote))
+                            .foregroundStyle(Color.textMuted)
+                    }
                     Image(systemName: "chevron.down")
-                        .font(.system(size: isLarge ? 17 : 12, weight: .bold))
+                        .font(.phone(isLarge ? 17 : 12, .bold, relativeTo: isLarge ? .largeTitle : .headline))
                         .foregroundStyle(Color.textMuted)
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Shows your views and labels")
+            .task(id: model.accountFilter) { _ = try? await $unread.load(Conversation.unreadInInbox(accountID: model.accountFilter).count()) }
         } else {
             label
         }
@@ -401,7 +410,7 @@ private struct AccountMenu: View {
         @Bindable var model = model
         Menu {
             Picker("Account", selection: $model.accountFilter) {
-                Label("All Accounts", systemImage: "tray.2").tag(Account.ID?.none)
+                Label("All accounts", systemImage: "square.stack").tag(Account.ID?.none)
                 ForEach(accounts) { account in
                     Label(account.address, systemImage: account.kind == .gmail ? "envelope" : "at").tag(Account.ID?.some(account.id))
                 }
@@ -413,8 +422,9 @@ private struct AccountMenu: View {
                 if let current = accounts.first(where: { $0.id == model.accountFilter }) {
                     Avatar(current.displayName, size: 34)
                 } else {
-                    Image(systemName: "tray.2")
-                        .font(.system(size: 14, weight: .medium))
+                    // The Mac's mark for every account. A tray read as the inbox.
+                    Image(systemName: "square.stack")
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color.textSecondary)
                         .frame(width: 34, height: 34)
                         .background(Color.selected, in: .circle)

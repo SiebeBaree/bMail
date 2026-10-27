@@ -7,7 +7,7 @@ import SwiftUI
 /// The views, Vercel-style: text tabs with a line under the current one, unread counts in mono.
 struct TabBar: View {
     @Environment(AppModel.self) private var model
-    @FetchOne(Conversation.where { $0.folder.eq(Folder.inbox) && !$0.isRead }.count()) private var unread = 0
+    @FetchOne(Conversation.unreadInInbox(accountID: nil).count()) private var unread = 0
     @FetchAll(MailLabel.order(by: \.name)) private var labels
 
     var body: some View {
@@ -21,11 +21,15 @@ struct TabBar: View {
                 }
             }
             if !labels.isEmpty {
+                let names = labels.names
                 Rectangle().fill(Color.lineStrong).frame(width: 1, height: 14).padding(.bottom, 14)
-                ForEach(labels.names, id: \.self) { name in
-                    TabButton(title: name, count: nil, help: "Label", isSelected: model.labelFilter == name && model.searchResults == nil) {
+                ForEach(names.prefix(Self.inlineLabels), id: \.self) { name in
+                    TabButton(title: name, count: nil, help: "Show \(name)", isSelected: model.labelFilter == name && model.searchResults == nil) {
                         model.labelFilter = name
                     }
+                }
+                if names.count > Self.inlineLabels {
+                    MoreLabels(names: Array(names.dropFirst(Self.inlineLabels)))
                 }
             }
             Spacer()
@@ -35,11 +39,42 @@ struct TabBar: View {
         .padding(.horizontal, 20)
         .frame(height: 42)
         .background(Color.chrome)
+        .task(id: model.accountFilter) { _ = try? await $unread.load(Conversation.unreadInInbox(accountID: model.accountFilter).count()) }
     }
+
+    /// Labels shown as tabs. The rest wait behind More, so a long list can't push the bar past the window.
+    private static let inlineLabels = 5
 
     /// Spam and trash join the bar only while you're in them.
     private var tabs: [MailTab] {
         MailTab.visible.contains(model.tab) ? MailTab.visible : MailTab.visible + [model.tab]
+    }
+}
+
+/// The labels past the first few. Its tab takes the name of the one you're in.
+private struct MoreLabels: View {
+    let names: [String]
+    @Environment(AppModel.self) private var model
+    @State private var isOpen = false
+
+    var body: some View {
+        let current = names.first { $0 == model.labelFilter && model.searchResults == nil }
+        TabButton(title: current ?? "More", count: nil, help: "More labels", isSelected: current != nil) { isOpen.toggle() }
+            .dropdown(isPresented: $isOpen) {
+                ForEach(names, id: \.self) { name in
+                    Button {
+                        isOpen = false
+                        model.labelFilter = name
+                    } label: {
+                        HStack {
+                            Text(name)
+                            Spacer(minLength: 16)
+                            if name == current { Image(systemName: "checkmark").font(.controlIcon) }
+                        }
+                    }
+                    .buttonStyle(.dropdownItem)
+                }
+            }
     }
 }
 

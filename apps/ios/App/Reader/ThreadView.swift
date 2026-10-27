@@ -62,7 +62,10 @@ struct ThreadView: View {
                 }
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(summary).font(.phone(14)).foregroundStyle(Color.textMuted).lineLimit(2)
+                // One message names its sender right below, so only a thread gets the line.
+                if thread.messages.count > 1 {
+                    Text(summary).font(.phone(14)).foregroundStyle(Color.textMuted).lineLimit(2)
+                }
                 Spacer(minLength: 12)
                 unsubscribe(conversation.id)
             }
@@ -90,7 +93,6 @@ struct ThreadView: View {
         let people = others.isEmpty
             ? (thread.messages.first?.to.map(\.displayName) ?? []).joined(separator: ", ")
             : ListFormatter.localizedString(byJoining: others)
-        if count == 1 { return thread.messages.first?.direction == .outbound ? "To \(people)" : "From \(people)" }
         return "\(count) messages with \(people)"
     }
 

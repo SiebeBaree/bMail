@@ -21,7 +21,7 @@ struct AttachmentList: View {
                             if downloading.contains(file.id) {
                                 ProgressView().controlSize(.small)
                             } else {
-                                Image(systemName: symbol(for: file)).font(.system(size: 17)).foregroundStyle(Color.textSecondary)
+                                Image(systemName: symbol(for: file)).font(.phone(17)).foregroundStyle(Color.textSecondary)
                             }
                         }
                         .frame(width: 36, height: 36)
