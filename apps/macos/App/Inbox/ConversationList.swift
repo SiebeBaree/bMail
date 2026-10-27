@@ -9,14 +9,17 @@ struct ConversationList: View {
     @Environment(AppModel.self) private var model
     @Environment(\.colorScheme) private var colorScheme
     @State private var query = ConversationQuery()
+    @State private var showsFetching = false
 
     var body: some View {
         let request = ConversationsRequest(tab: model.tab, accountID: model.accountFilter, label: model.labelFilter, searchIDs: model.searchResults)
         let labelNames = query.labelNames
         let tags = model.accountFilter == nil ? query.tags : [:]
+        let isFetching = model.session.syncStatus.isCatchingUp && model.tab == .inbox && model.labelFilter == nil && model.searchResults == nil
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if showsFetching, !query.conversations.isEmpty { FetchingRow() }
                     ForEach(query.conversations) { conversation in
                         ConversationRow(
                             conversation: conversation,
@@ -35,7 +38,13 @@ struct ConversationList: View {
             }
             .scrollIndicators(.automatic)
             .overlay {
-                if query.conversations.isEmpty, !query.isLoading { EmptyList(tab: model.tab, isSearching: model.searchResults != nil, isLabel: model.labelFilter != nil) }
+                if query.conversations.isEmpty, !query.isLoading {
+                    if showsFetching {
+                        FetchingMail()
+                    } else if !isFetching {
+                        EmptyList(tab: model.tab, isSearching: model.searchResults != nil, isLabel: model.labelFilter != nil)
+                    }
+                }
             }
             .onChange(of: model.selection) { _, id in
                 guard let id else { return }
@@ -43,6 +52,7 @@ struct ConversationList: View {
             }
         }
         .background(Color.canvas)
+        .loaderVisibility(while: isFetching, isShown: $showsFetching)
         .task(id: request) { await query.load(request) }
         .onChange(of: query.conversations.map(\.id), initial: true) { _, ids in model.listOrder = ids }
         .onChange(of: [model.selection], initial: true) { _, _ in
@@ -92,6 +102,30 @@ final class ConversationQuery {
         isLoading = true
         try? await $conversations.load(request)
         isLoading = false
+    }
+}
+
+/// The first row while new mail is on its way.
+private struct FetchingRow: View {
+    var body: some View {
+        VStack(spacing: 6) {
+            EnvelopeLoader(size: 52)
+            Text("Fetching new mail").font(.uiMedium).foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 14)
+        .padding(.bottom, 16)
+        .overlay(alignment: .bottom) { Hairline().opacity(0.6) }
+    }
+}
+
+/// An empty inbox while the first sync brings mail in.
+private struct FetchingMail: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            EnvelopeLoader(size: 150)
+            Text("Fetching your mail").font(.ui).foregroundStyle(Color.textMuted)
+        }
     }
 }
 
