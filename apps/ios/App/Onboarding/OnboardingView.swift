@@ -12,6 +12,8 @@ struct OnboardingView: View {
     @Environment(AppModel.self) private var model
     @FetchAll(Account.order(by: \.position)) private var accounts
     @FetchAll(Domain.order(by: \.name)) private var domains
+    /// Your server's sync cursor, there once its first pass landed. A Gmail sync before it doesn't count.
+    @FetchOne(SyncCursor.where { $0.source.eq("server") }.count()) private var serverCursors = 0
     /// Nil until the server says.
     @State private var hasResend: Bool?
     @State private var landing = CGRect.zero
@@ -22,7 +24,7 @@ struct OnboardingView: View {
         let onboarding = model.onboarding
         let progress = Onboarding.Progress(
             accounts: accounts, domains: domains, hasServer: model.session.server != nil, hasResend: hasResend,
-            hasSynced: model.session.syncStatus.lastSyncedAt != nil
+            hasSynced: serverCursors > 0
         )
         let current = onboarding.current(progress)
         ZStack {

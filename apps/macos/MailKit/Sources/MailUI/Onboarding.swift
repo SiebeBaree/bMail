@@ -20,7 +20,7 @@ public final class Onboarding {
         public var hasServer: Bool
         /// Nil until the server says.
         public var hasResend: Bool?
-        /// A first pass has landed, so the domains and addresses of a server you connected are in.
+        /// Your server's first pass has landed, so its domains and addresses are in.
         public var hasSynced: Bool
 
         public init(accounts: [Account], domains: [Domain], hasServer: Bool, hasResend: Bool?, hasSynced: Bool) {
@@ -89,7 +89,8 @@ public final class Onboarding {
 
     private func isDone(_ step: Step, _ progress: Progress) -> Bool {
         switch step {
-        case .mail: passed.contains(.mail)
+        // Comes back if your mail goes before setup is done, e.g. a Gmail account removed on another device.
+        case .mail: passed.contains(.mail) && (wantsDomain || progress.hasServer || !progress.accounts.isEmpty)
         // Connected isn't enough: until the server answers and syncs, the steps after it can't tell what's there.
         case .server: progress.hasServer && progress.hasResend != nil && progress.hasSynced
         case .resend: progress.hasResend == true || !progress.domains.isEmpty

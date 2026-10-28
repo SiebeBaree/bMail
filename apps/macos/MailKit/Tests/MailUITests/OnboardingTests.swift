@@ -78,6 +78,14 @@ import Testing
         #expect(relaunch.current(progress([gmail])) == .ai)
     }
 
+    @Test func losingYourMailHalfwayBringsBackYourMail() {
+        let onboarding = Onboarding(defaults: fresh(), isReturning: false, hasMail: true, offersAgents: true)
+        #expect(onboarding.current(progress([gmail])) == .ai)
+        #expect(onboarding.current(progress()) == .mail)
+        // A server without an address yet still counts, so a relaunch picks up its steps.
+        #expect(onboarding.current(progress(server: true, resend: true, synced: true)) == .domain)
+    }
+
     @Test func someoneUpdatingNeverSeesAnyOfIt() {
         let onboarding = Onboarding(defaults: fresh(), isReturning: true, hasMail: true, offersAgents: true)
         #expect(!onboarding.showsIntro)
