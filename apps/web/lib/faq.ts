@@ -1,3 +1,4 @@
+import type { Release } from "./release";
 import { site } from "./site";
 
 export type Question = { question: string; answer: string };
@@ -6,12 +7,8 @@ export type Question = { question: string; answer: string };
  * The questions people ask about bMail, answered in full sentences so search engines and AI assistants can quote them.
  * The FAQ section, its FAQPage structured data and llms.txt all read this one list.
  */
-export function faq(): Question[] {
+export function faq(release: Release): Question[] {
     return [
-        {
-            question: "When can I download bMail?",
-            answer: `bMail isn't out yet. It's coming soon for ${site.platform}.`,
-        },
         {
             question: "What is bMail?",
             answer: "bMail is a free, open source email app for macOS. It works with Gmail and with addresses on your own domain, saves every change on your Mac first so nothing waits on a server and has a keyboard shortcut for every action.",
@@ -22,7 +19,7 @@ export function faq(): Question[] {
         },
         {
             question: "Which Macs does bMail run on?",
-            answer: `bMail runs on ${site.platform} and later. It's a native app written in Swift and SwiftUI.`,
+            answer: `bMail runs on ${site.platform} and later. It's a native app written in Swift and SwiftUI${release.size ? `, and the download is ${release.size}` : ""}.`,
         },
         {
             question: "Does bMail work with Gmail?",

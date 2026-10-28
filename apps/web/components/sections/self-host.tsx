@@ -1,5 +1,8 @@
+import { ArrowRight } from "lucide-react";
+
 import { Fit } from "@/components/fit";
 import { Reveal } from "@/components/reveal";
+import { setupGuideUrl } from "@/lib/release";
 
 import { Diagram } from "./diagram";
 import { Heading, Section } from "./frame";
@@ -37,6 +40,13 @@ export function SelfHost() {
                         ))}
                     </ol>
                 </div>
+                <a
+                    href={setupGuideUrl}
+                    className="group mt-6 inline-flex items-center gap-1.5 text-[15px] text-link hover:text-fg"
+                >
+                    Read the setup guide
+                    <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </a>
             </Reveal>
             <Reveal delay={0.1}>
                 <Fit width={640} height={440}>

@@ -11,10 +11,12 @@ import { KeyboardSection } from "@/components/sections/keyboard";
 import { SelfHost } from "@/components/sections/self-host";
 import { Tracking } from "@/components/sections/tracking";
 import { faq } from "@/lib/faq";
+import { latestRelease } from "@/lib/release";
 import { structuredData } from "@/lib/structured-data";
 
-export default function Home() {
-    const questions = faq();
+export default async function Home() {
+    const release = await latestRelease();
+    const questions = faq(release);
     return (
         <>
             <script
@@ -22,13 +24,13 @@ export default function Home() {
                 // Escaping < keeps any string in the data from closing the script tag.
                 // oxlint-disable-next-line react/no-danger
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify(structuredData(questions)).replace(/</g, "\\u003c"),
+                    __html: JSON.stringify(structuredData(release, questions)).replace(/</g, "\\u003c"),
                 }}
             />
             <Intro />
-            <Nav />
+            <Nav release={release} />
             <main className="overflow-x-clip">
-                <Hero />
+                <Hero release={release} />
                 {/* The blueprint column: every section below shares these two hairlines. */}
                 <div className="mx-auto mt-28 max-w-[1200px] border-x border-line">
                     <Instant />
@@ -39,7 +41,7 @@ export default function Home() {
                     <SelfHost />
                     <Compare />
                     <Faq questions={questions} />
-                    <Closing />
+                    <Closing release={release} />
                 </div>
             </main>
             <Footer />
