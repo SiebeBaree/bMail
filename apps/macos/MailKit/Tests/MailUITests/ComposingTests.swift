@@ -73,6 +73,28 @@ import Testing
         #expect(named("Invoice 2026.pdf") == "Invoice 2026.pdf")
     }
 
+    @Test func aSavedAttachmentNeverReplacesAFileThatsThere() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let invoice = Attachment(id: UUID(), filename: "invoice.pdf", contentType: "application/pdf", size: 1, contentID: nil)
+        #expect(invoice.freeURL(in: folder).lastPathComponent == "invoice.pdf")
+        try Data().write(to: folder.appending(path: "invoice.pdf"))
+        #expect(invoice.freeURL(in: folder).lastPathComponent == "invoice 2.pdf")
+        try Data().write(to: folder.appending(path: "invoice 2.pdf"))
+        #expect(invoice.freeURL(in: folder).lastPathComponent == "invoice 3.pdf")
+    }
+
+    @Test func anEventOutsideThisWeekNamesItsDate() throws {
+        let calendar = Calendar.current
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: 27, hour: 12)))
+        let earlierToday = try #require(calendar.date(byAdding: .hour, value: -2, to: now))
+        let threeWeeksAgo = try #require(calendar.date(byAdding: .day, value: -21, to: now))
+        #expect(MailDate.event(earlierToday, now: now) == earlierToday.formatted(date: .omitted, time: .shortened))
+        let time = threeWeeksAgo.formatted(date: .omitted, time: .shortened)
+        #expect(MailDate.event(threeWeeksAgo, now: now) == "\(threeWeeksAgo.formatted(.dateTime.month(.abbreviated).day())), \(time)")
+    }
+
     private func message(from: Address, to: [Address], cc: [Address] = [], direction: Direction = .inbound, subject: String) -> Message {
         Message(
             id: UUID(), conversationID: UUID(), accountID: UUID(), direction: direction, deliveryStatus: nil,

@@ -34,7 +34,7 @@ struct LabelPicker: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: symbol(for: label))
-                                .font(.system(size: 19))
+                                .font(.phone(19))
                                 .foregroundStyle(symbol(for: label) == "circle" ? Color.textFaint : Color.accent)
                                 .contentTransition(.symbolEffect(.replace))
                             Text(label).font(.phone(16)).foregroundStyle(Color.textPrimary)

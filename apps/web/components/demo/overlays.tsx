@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Mail, Search, Send, Star, Undo2 } from "lucide-react";
+import { Check, Mail, Search, Send, Star, Trash2, Undo2 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type Dispatch, type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -37,7 +37,8 @@ export function Palette({
                 // Among equals the shorter title wins, so "rep" lands on Reply.
                 return score === null ? [] : [{ command, score: score - command.title.length * 0.01 }];
             })
-            .toSorted((a, b) => b.score - a.score)
+            // Nothing typed: the keymap's order, so the list holds still.
+            .toSorted((a, b) => (query === "" ? 0 : b.score - a.score))
             .map(({ command }): Item => ({ kind: "command", command }));
         const found =
             query.length < 2
@@ -187,7 +188,12 @@ export function ShortcutSheet({ close }: { close: () => void }) {
                         <div key={group} className="flex w-[230px] flex-col gap-2">
                             <span className="pb-1 font-semibold">{group}</span>
                             {commands
-                                .filter((command) => command.group === group && command.id !== "extendPrevious")
+                                .filter(
+                                    (command) =>
+                                        command.group === group &&
+                                        command.id !== "extendPrevious" &&
+                                        command.keys.length > 0,
+                                )
                                 .map((command) => (
                                     <div key={command.id} className="flex items-center justify-between gap-4">
                                         <span className="truncate text-fg-2">{command.title}</span>
@@ -216,7 +222,7 @@ function Backdrop({ children, close, center }: { children: ReactNode; close: () 
     );
 }
 
-const toastIcons = { check: Check, star: Star, undo: Undo2, send: Send } as const;
+const toastIcons = { check: Check, star: Star, undo: Undo2, send: Send, trash: Trash2 } as const;
 
 /** Bottom-left toasts (DesignSystem/Toasts.swift): what just happened, with Undo when it can be undone. */
 export function Toasts({ toasts, dispatch }: { toasts: Toast[]; dispatch: Dispatch<Action> }) {

@@ -141,14 +141,22 @@ final class AppModel {
     /// you're writing something else by then: it waits until that one closes.
     func send(_ message: OutgoingMessage, from composer: ComposerModel) {
         Haptics.success()
-        session.send(message) { [weak self] in
-            guard let self else { return }
-            Haptics.tap()
-            if case let .composer(current) = self.sheet, current.hasContent {
-                self.waitingToReopen = composer
-            } else {
-                self.sheet = .composer(composer)
-            }
+        session.send(message) { [weak self] in self?.reopen(composer) }
+    }
+
+    /// Closes the composer. One with something in it comes back with Undo, the same way a sent one does.
+    func discard(_ composer: ComposerModel) {
+        if case let .composer(current) = sheet, current === composer { sheet = nil }
+        guard composer.hasContent else { return }
+        session.toasts.show(Toast("Discarded", symbol: "trash", action: .init("Undo") { [weak self] in self?.reopen(composer) }))
+    }
+
+    private func reopen(_ composer: ComposerModel) {
+        Haptics.tap()
+        if case let .composer(current) = sheet, current.hasContent {
+            waitingToReopen = composer
+        } else {
+            sheet = .composer(composer)
         }
     }
 

@@ -175,7 +175,7 @@ private struct AccountsSection: View {
             SettingsHeader(title: "Accounts") {
                 Button { isAddOpen.toggle() } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                        Image(systemName: "plus").font(.controlIcon)
                         Text(isConnecting ? "Connecting Gmail" : "Add account")
                     }
                 }
@@ -225,7 +225,7 @@ private struct AccountsSection: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11))
+                    .font(.smallIcon)
                     .foregroundStyle(Color.textSecondary)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
@@ -465,7 +465,7 @@ private struct LabelRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "tag").font(.system(size: 11)).foregroundStyle(Color.textMuted).frame(width: 28)
+            Image(systemName: "tag").font(.smallIcon).foregroundStyle(Color.textMuted).frame(width: 28)
             TextField("Label", text: $name)
                 .textFieldStyle(.plain)
                 .font(.uiMedium)

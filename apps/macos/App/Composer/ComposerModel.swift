@@ -58,6 +58,8 @@ final class ComposerModel {
     var trackingEnabled = false
     var attachments: [OutgoingAttachment] = []
     var error: String?
+    /// A recipient field's suggestions are open, so Esc closes them instead of the composer.
+    var isSuggestingRecipients = false
 
     @ObservationIgnored private weak var app: AppModel?
 
@@ -178,8 +180,19 @@ final class ComposerModel {
         if panel.runModal() == .OK { attach(panel.urls) }
     }
 
+    /// Anything you'd lose by closing it: what you typed and attached and, for new mail, who it's to and the subject.
+    var hasContent: Bool {
+        let signature = accountID.map(Signatures.text(for:)) ?? ""
+        let written = String(text.body.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = !written.isEmpty && written != signature
+        if mode == .new {
+            return typed || !(to + cc + bcc).isEmpty || !subject.isEmpty || !attachments.isEmpty
+        }
+        return typed || !attachments.isEmpty
+    }
+
     func close() {
-        app?.composer = nil
+        app?.discard(self)
     }
 
     // MARK: - Sending
@@ -190,7 +203,7 @@ final class ComposerModel {
             return
         }
         guard !(to + cc + bcc).isEmpty else {
-            error = "Add a recipient."
+            error = "Add someone to send this to."
             return
         }
         if let invalid = (to + cc + bcc).first(where: { !$0.email.isPlausibleEmail }) {

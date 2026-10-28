@@ -50,7 +50,7 @@ struct WelcomeView: View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13))
+                    .font(.rowIcon)
                     .foregroundStyle(Color.textSecondary)
                     .frame(width: 30, height: 30)
                     .background(Color.selected, in: .circle)
@@ -59,7 +59,7 @@ struct WelcomeView: View {
                     Text(detail).font(.geist(12)).foregroundStyle(Color.textMuted)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(Color.textFaint)
+                Image(systemName: "chevron.right").font(.controlIcon).foregroundStyle(Color.textFaint)
             }
             .padding(.vertical, 12)
             .contentShape(.rect)

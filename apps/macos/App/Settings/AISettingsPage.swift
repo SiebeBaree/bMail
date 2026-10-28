@@ -16,17 +16,18 @@ struct AISettingsPage: View {
         @Bindable var ai = model.session.ai
         VStack(alignment: .leading, spacing: 28) {
             ProviderGroup()
-            SettingsGroup("Tab completion") {
-                GroupRow("Suggest as you write", note: "Gray text after the cursor. Tab accepts.") {
-                    Toggle(isOn: $ai.isCompletionOn) { EmptyView() }.toggleStyle(.mailSwitch).accessibilityLabel("Tab completion")
+            // The same names as the iPhone's settings.
+            SettingsGroup("Writing") {
+                GroupRow("Suggestions", note: "Gray text after the cursor. Tab accepts.") {
+                    Toggle(isOn: $ai.isCompletionOn) { EmptyView() }.toggleStyle(.mailSwitch).accessibilityLabel("Suggestions")
                 }
                 GroupRow("Model") { ModelPicker(choice: $ai.completion, provider: ai.provider, models: models) }
                 if sent < CompletionPrompt.minimumSentMails {
                     GroupRow("Learning your style", note: "Starts after \(CompletionPrompt.minimumSentMails) sent emails. \(sent) so far.")
                 }
             }
-            SettingsGroup("Auto labelling") {
-                GroupRow("Label new mail", note: "Uses the label descriptions below.") {
+            SettingsGroup("Labels") {
+                GroupRow("Auto labelling", note: "Labels new inbox mail that matches a description below.") {
                     Toggle(isOn: $ai.isLabellingOn) { EmptyView() }.toggleStyle(.mailSwitch).accessibilityLabel("Auto labelling")
                 }
                 GroupRow("Model") { ModelPicker(choice: $ai.labelling, provider: ai.provider, models: models) }
@@ -215,7 +216,7 @@ private struct ModelPicker: View {
             LogoView(Logo.of(model: choice.model, on: provider))
             Text(models.first { $0.id == choice.model }?.name ?? choice.model).lineLimit(1)
             Rectangle().fill(Color.lineStrong).frame(width: 1, height: 12)
-            Image(systemName: "brain").font(.system(size: 10)).foregroundStyle(Color.textMuted)
+            Image(systemName: "brain").font(.smallIcon).foregroundStyle(Color.textMuted)
             Text(choice.reasoning.title).foregroundStyle(Color.textSecondary)
             Chevron()
         }
@@ -232,7 +233,7 @@ private struct ModelList: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Color.textFaint)
+                Image(systemName: "magnifyingglass").font(.smallIcon).foregroundStyle(Color.textFaint)
                 TextField("Search models", text: $search).textFieldStyle(.plain)
             }
             .padding(.horizontal, 8)
@@ -324,7 +325,7 @@ private struct LabelDescriptions: View {
     @FetchAll(MailLabel.order(by: \.name)) private var labels
 
     var body: some View {
-        SettingsGroup("Labels") {
+        SettingsGroup("What belongs under each label") {
             ForEach(labels.names, id: \.self) { LabelDescriptionRow(name: $0) }
             if labels.isEmpty {
                 GroupRow("No labels yet", note: "Press L on a conversation to create one.")
@@ -363,7 +364,7 @@ private struct LabelDescriptionRow: View {
 
 private struct Chevron: View {
     var body: some View {
-        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+        Image(systemName: "chevron.down").font(.controlIcon).foregroundStyle(Color.textMuted)
     }
 }
 
@@ -371,6 +372,6 @@ private struct Checkmark: View {
     let isOn: Bool
 
     var body: some View {
-        Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).opacity(isOn ? 1 : 0)
+        Image(systemName: "checkmark").font(.controlIcon).opacity(isOn ? 1 : 0)
     }
 }

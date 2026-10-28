@@ -164,7 +164,7 @@ struct ServerSetupScreen: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Color.chrome)
-        .navigationTitle("Your Own Domain")
+        .navigationTitle("Your own domain")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

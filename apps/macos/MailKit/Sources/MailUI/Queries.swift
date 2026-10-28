@@ -24,7 +24,7 @@ public enum MailTab: String, CaseIterable, Identifiable, Sendable {
         case .inbox: "tray"
         case .starred: "star"
         case .sent: "paperplane"
-        case .done: "checkmark"
+        case .done: "checkmark.circle"
         case .tracked: "waveform.path.ecg"
         case .spam: "exclamationmark.octagon"
         case .trash: "trash"
@@ -111,6 +111,15 @@ public struct ConversationsRequest: FetchKeyRequest {
     private func scoped(_ query: Where<Conversation>) -> Where<Conversation> {
         guard let accountID else { return query }
         return query.where { $0.accountID.eq(accountID) }
+    }
+}
+
+extension Conversation {
+    /// Unread conversations in the inbox, for the count next to it. Nil counts every account.
+    public static func unreadInInbox(accountID: Account.ID?) -> Where<Conversation> {
+        let unread = Conversation.where { $0.folder.eq(Folder.inbox) && !$0.isRead }
+        guard let accountID else { return unread }
+        return unread.where { $0.accountID.eq(accountID) }
     }
 }
 

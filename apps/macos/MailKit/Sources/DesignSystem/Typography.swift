@@ -29,6 +29,15 @@ extension Font {
     public static let pageTitle = geist(20, .semibold)
     public static let meta = geistMono(12)
     public static let keyCap = geistMono(11)
+
+    /// SF Symbols, by where they sit, a step under the text beside them. The leading icon of a palette or menu row.
+    public static let rowIcon = Font.system(size: 13)
+    /// Beside interface text, in buttons and bars.
+    public static let icon = Font.system(size: 12)
+    /// Beside 12pt meta text: a row's star, an address, a label.
+    public static let smallIcon = Font.system(size: 11)
+    /// Chevrons, checkmarks and close marks inside a control.
+    public static let controlIcon = Font.system(size: 9, weight: .semibold)
 }
 
 extension Typography {

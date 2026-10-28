@@ -4,10 +4,11 @@ import MailUI
 import SwiftUI
 
 /// Addresses as tokens. Type and press Return, Tab or a comma to add one; Backspace on an empty field removes the last.
-/// Suggestions come from people you've written to, most frequent first.
+/// Suggestions come from people you've written to, most frequent first. Esc closes them before it closes the composer.
 struct RecipientField: View {
     let label: String
     @Binding var addresses: [Address]
+    let composer: ComposerModel
     var focusOnAppear = false
     @Environment(AppModel.self) private var app
     @State private var input = ""
@@ -53,14 +54,20 @@ struct RecipientField: View {
         .frame(minHeight: 44)
         .overlay(alignment: .bottom) { Hairline() }
         .overlay(alignment: .topLeading) {
-            if isFocused, !suggestions.isEmpty {
+            if showsSuggestions {
                 Suggestions(contacts: suggestions, highlighted: highlighted) { commit(suggestion: $0) }
                     .offset(x: 88, y: 40)
             }
         }
         .zIndex(isFocused ? 1 : 0)
         .onAppear { if focusOnAppear { isFocused = true } }
+        .onChange(of: showsSuggestions) { _, shows in composer.isSuggestingRecipients = shows }
+        .onChange(of: composer.isSuggestingRecipients) { _, isSuggesting in
+            if !isSuggesting, showsSuggestions { suggestions = [] }
+        }
     }
+
+    private var showsSuggestions: Bool { isFocused && !suggestions.isEmpty }
 
     private func move(_ offset: Int) -> KeyPress.Result {
         guard !suggestions.isEmpty else { return .ignored }
@@ -96,7 +103,7 @@ private struct Token: View {
             Text(address.name ?? address.email)
                 .foregroundStyle(address.email.isPlausibleEmail ? Color.textPrimary : Color.danger)
             Button(action: remove) {
-                Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(Color.textMuted)
+                Image(systemName: "xmark").font(.controlIcon).foregroundStyle(Color.textMuted)
             }
             .buttonStyle(.plain)
         }

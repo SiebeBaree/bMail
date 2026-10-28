@@ -21,18 +21,17 @@ struct ComposerView: View {
                         Text("Written by \(draft.agent)").foregroundStyle(Color.textMuted)
                     }
                     Spacer()
-                    Text("Discard").foregroundStyle(Color.textMuted)
-                    KeyCap("Esc")
+                    discardButton
                 }
                 .padding(.horizontal, 20)
                 .frame(height: 48)
                 .overlay(alignment: .bottom) { Hairline() }
             }
             fromRow
-            RecipientField(label: "To", addresses: $model.to, focusOnAppear: model.to.isEmpty)
+            RecipientField(label: "To", addresses: $model.to, composer: model, focusOnAppear: model.to.isEmpty)
             if model.showsCopies {
-                RecipientField(label: "Cc", addresses: $model.cc)
-                RecipientField(label: "Bcc", addresses: $model.bcc)
+                RecipientField(label: "Cc", addresses: $model.cc, composer: model)
+                RecipientField(label: "Bcc", addresses: $model.bcc, composer: model)
             }
             if model.mode == .new || model.mode == .forward || model.draft != nil {
                 HStack(spacing: 12) {
@@ -86,13 +85,23 @@ struct ComposerView: View {
         .onChange(of: focus) { _, focus in if focus != .body { model.text.dismissSuggestion() } }
     }
 
+    private var discardButton: some View {
+        Button { model.close() } label: {
+            HStack(spacing: 8) {
+                Text("Discard")
+                KeyCap("Esc")
+            }
+        }
+        .buttonStyle(.ghost)
+    }
+
     private var fromRow: some View {
         HStack(spacing: 12) {
             Text("From").foregroundStyle(Color.textMuted).frame(width: 56, alignment: .leading)
             Button { isFromOpen.toggle() } label: {
                 HStack(spacing: 8) {
                     Text(model.account.map { "\($0.displayName) <\($0.address)>" } ?? "Choose an account")
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.textMuted)
+                    Image(systemName: "chevron.down").font(.controlIcon).foregroundStyle(Color.textMuted)
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 26)
@@ -112,7 +121,7 @@ struct ComposerView: View {
                             Text(account.address)
                             Spacer(minLength: 16)
                             if account.id == model.accountID {
-                                Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold))
+                                Image(systemName: "checkmark").font(.controlIcon)
                             }
                         }
                     }
@@ -140,7 +149,7 @@ struct ComposerView: View {
                     Button {
                         model.attachments.removeAll { $0.id == file.id }
                     } label: {
-                        Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                        Image(systemName: "xmark").font(.controlIcon)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color.textMuted)
@@ -184,6 +193,8 @@ struct ComposerView: View {
                     .lineLimit(1)
             }
             Spacer()
+            // New mail has it in the header; a reply under a conversation has no header.
+            if !model.replacesReader { discardButton }
             Button {
                 model.send(fontContext: fontContext)
             } label: {

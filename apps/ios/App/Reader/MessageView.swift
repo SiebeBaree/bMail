@@ -55,7 +55,7 @@ struct MessageView: View {
                     HStack(spacing: 4) {
                         Text(recipients).lineLimit(1)
                         Image(systemName: "chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.phone(10, .semibold, relativeTo: .caption2))
                             .rotationEffect(.degrees(showsDetails ? 180 : 0))
                     }
                     .font(.phone(14))

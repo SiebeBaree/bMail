@@ -69,7 +69,7 @@ struct WelcomeView: View {
                     Text(detail).font(.phone(14)).foregroundStyle(Color.textMuted)
                 }
                 Spacer()
-                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color.textFaint)
+                Image(systemName: "chevron.right").font(.phone(13, .semibold, relativeTo: .footnote)).foregroundStyle(Color.textFaint)
             }
             .padding(.vertical, 14)
             .contentShape(.rect)

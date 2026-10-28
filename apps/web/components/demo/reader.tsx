@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, FileText, Mail, Paperclip, Reply, Star, Tag, Trash2 } from "lucide-react";
+import { ChevronDown, CircleCheck, FileText, Mail, Paperclip, Reply, Star, Tag, Trash2 } from "lucide-react";
 import { type Dispatch, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Activity } from "./activity";
@@ -40,16 +40,26 @@ export function ConversationView({
                 <span className="ml-1 font-mono text-[12px] text-muted">
                     {accountById(conversation.account).address}
                 </span>
-                {conversation.labels.map((label) => (
-                    <span key={label} className="pl-2.5 text-[12px] text-fg-2">
-                        {label}
+                {conversation.labels.length > 0 && (
+                    <span className="ml-3.5 flex items-center gap-2">
+                        <Tag className="size-[11px] text-muted" />
+                        {conversation.labels.map((label) => (
+                            <button
+                                key={label}
+                                type="button"
+                                onClick={() => dispatch({ type: "label", label })}
+                                className="text-[12px] text-fg-2 hover:text-fg"
+                            >
+                                {label}
+                            </button>
+                        ))}
                     </span>
-                ))}
+                )}
                 <span className="flex-1" />
                 {conversation.unsubscribe && <MailButton kind="ghost">Unsubscribe</MailButton>}
                 <ActionButton icon={<Tag className="size-3" />} keyName="L" />
                 <ActionButton
-                    icon={<Check className="size-3" />}
+                    icon={<CircleCheck className="size-3" />}
                     keyName="E"
                     onClick={() => dispatch({ type: "file", folder: "done" })}
                 />
@@ -66,7 +76,12 @@ export function ConversationView({
             </div>
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-8 pt-[26px] pb-6">
                 <p className="text-[20px] font-semibold tracking-[-0.3px]">{conversation.subject}</p>
-                <p className="mt-1 mb-[18px] text-[12px] text-muted">{summary(conversation)}</p>
+                {/* One message names its sender right below, so only a thread gets the line. */}
+                {conversation.messages.length > 1 ? (
+                    <p className="mt-1 mb-[18px] text-[12px] text-muted">{summary(conversation)}</p>
+                ) : (
+                    <div className="mb-[18px]" />
+                )}
                 {conversation.messages.map((message) => (
                     <div key={message.id} className="border-t border-line">
                         {expanded.has(message.id) ? (
@@ -84,18 +99,24 @@ export function ConversationView({
             </div>
             {!composer && last && (
                 <div className="shrink-0 px-8 py-3.5">
-                    <button
-                        type="button"
-                        onClick={() => dispatch({ type: "compose", mode: "reply" })}
-                        className="flex h-11 w-full items-center gap-2.5 rounded-lg border border-line-strong px-3.5 text-muted hover:text-fg-2"
-                    >
-                        <Reply className="size-3" />
-                        Reply to {last.outbound ? (last.to[0]?.name ?? "everyone") : last.from.name}
-                        <span className="flex-1" />
-                        <KeyCap>R</KeyCap>
-                        <span className="text-[12px]">all</span>
-                        <KeyCap>A</KeyCap>
-                    </button>
+                    <div className="flex h-11 w-full items-center gap-0.5 rounded-lg border border-line-strong pr-1.5">
+                        <button
+                            type="button"
+                            onClick={() => dispatch({ type: "compose", mode: "reply" })}
+                            className="flex h-full flex-1 items-center gap-2.5 pr-1.5 pl-3.5 text-muted hover:text-fg"
+                        >
+                            <Reply className="size-3" />
+                            Reply to {last.outbound ? (last.to[0]?.name ?? "everyone") : last.from.name}
+                            <span className="flex-1" />
+                            <KeyCap>R</KeyCap>
+                        </button>
+                        <MailButton kind="ghost" className="gap-2">
+                            Reply all <KeyCap>A</KeyCap>
+                        </MailButton>
+                        <MailButton kind="ghost" className="gap-2">
+                            Forward <KeyCap>F</KeyCap>
+                        </MailButton>
+                    </div>
                 </div>
             )}
         </div>
@@ -106,7 +127,6 @@ function summary(conversation: Conversation) {
     const { messages } = conversation;
     const others = [...new Set(messages.filter((m) => !m.outbound).map((m) => m.from.name))];
     const people = others.length > 0 ? others.join(" and ") : (messages[0]?.to.map((p) => p.name).join(", ") ?? "");
-    if (messages.length === 1) return messages[0]?.outbound ? `To ${people}` : `From ${people}`;
     return `${messages.length} messages with ${people}`;
 }
 
@@ -216,10 +236,7 @@ export function ComposerView({
                 <div className="flex h-12 shrink-0 items-center gap-2 border-b border-line px-5">
                     <span className="font-semibold">{composerTitles[composer.mode]}</span>
                     <span className="flex-1" />
-                    <button type="button" onClick={() => dispatch({ type: "discard" })} className="text-muted">
-                        Discard
-                    </button>
-                    <KeyCap>Esc</KeyCap>
+                    <DiscardButton dispatch={dispatch} />
                 </div>
             )}
             <Field label="From">
@@ -274,6 +291,8 @@ export function ComposerView({
                     </span>
                 )}
                 <span className="flex-1" />
+                {/* New mail has it in the header; a reply under a conversation has no header. */}
+                {inline && <DiscardButton dispatch={dispatch} />}
                 <MailButton kind="primary" onClick={() => dispatch({ type: "send" })}>
                     Send
                     <KeyCap>⌘↵</KeyCap>
@@ -306,5 +325,13 @@ export function EmptyReader() {
                 to write
             </span>
         </div>
+    );
+}
+
+function DiscardButton({ dispatch }: { dispatch: Dispatch<Action> }) {
+    return (
+        <MailButton kind="ghost" onClick={() => dispatch({ type: "discard" })} className="gap-2">
+            Discard <KeyCap>Esc</KeyCap>
+        </MailButton>
     );
 }

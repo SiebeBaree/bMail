@@ -365,7 +365,9 @@ function AccountMark({ name }: { name: string | undefined }) {
 
 /** The views as text tabs, Vercel-style, with the inbox's unread count in mono. */
 function TabBar({ state, dispatch }: { state: State; dispatch: Dispatch<Action> }) {
-    const unread = state.conversations.filter((c) => c.folder === "inbox" && c.unread).length;
+    const unread = state.conversations.filter(
+        (c) => c.folder === "inbox" && c.unread && (!state.account || c.account === state.account),
+    ).length;
     const searching = state.search.trim() !== "";
     return (
         <div className="flex h-[42px] shrink-0 items-end gap-[22px] border-b border-line bg-chrome px-5">

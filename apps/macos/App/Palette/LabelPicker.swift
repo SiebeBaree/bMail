@@ -87,12 +87,12 @@ struct LabelPicker: View {
             switch item {
             case let .label(name):
                 Image(systemName: symbol(for: name))
-                    .font(.system(size: 13))
+                    .font(.rowIcon)
                     .frame(width: 18)
                     .foregroundStyle(symbol(for: name) == "circle" ? Color.textFaint : Color.accent)
                 Text(name)
             case let .create(name):
-                Image(systemName: "plus").font(.system(size: 12)).frame(width: 18)
+                Image(systemName: "plus").font(.icon).frame(width: 18)
                 Text("Create \u{201C}\(name)\u{201D}")
             }
             Spacer()

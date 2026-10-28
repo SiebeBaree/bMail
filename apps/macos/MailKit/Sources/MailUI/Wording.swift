@@ -15,6 +15,21 @@ public enum MailDate {
         return date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 
+    /// When something happened, in a list of events: the time today, the weekday and time this week, the date and time
+    /// this year and the date before that. Never a bare weekday that could be any week.
+    public static func event(_ date: Date, now: Date = .now) -> String {
+        let calendar = Calendar.current
+        let time = date.formatted(date: .omitted, time: .shortened)
+        if calendar.isDate(date, inSameDayAs: now) { return time }
+        if let days = calendar.dateComponents([.day], from: date, to: now).day, days < 6 {
+            return "\(date.formatted(.dateTime.weekday(.abbreviated))) \(time)"
+        }
+        if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+            return "\(date.formatted(.dateTime.month(.abbreviated).day())), \(time)"
+        }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
     public static func long(_ date: Date) -> String {
         date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
     }
@@ -147,6 +162,21 @@ extension Attachment {
     public var savedName: String {
         let name = (filename as NSString).lastPathComponent
         return ["", ".", "..", "/"].contains(name) ? "Attachment" : name
+    }
+
+    /// Where to save it in `folder` without replacing what's there: `invoice.pdf`, then `invoice 2.pdf`, like Finder.
+    public func freeURL(in folder: URL) -> URL {
+        let name = savedName as NSString
+        var candidate = folder.appending(path: savedName, directoryHint: .notDirectory)
+        var number = 2
+        while FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) {
+            let numbered = name.pathExtension.isEmpty
+                ? "\(name.deletingPathExtension) \(number)"
+                : "\(name.deletingPathExtension) \(number).\(name.pathExtension)"
+            candidate = folder.appending(path: numbered, directoryHint: .notDirectory)
+            number += 1
+        }
+        return candidate
     }
 }
 

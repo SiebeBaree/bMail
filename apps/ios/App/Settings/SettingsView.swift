@@ -84,7 +84,7 @@ struct SettingsView: View {
                 isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } },
                 titleVisibility: .visible
             ) {
-                Button("Delete Label", role: .destructive) { if let label = deleting { delete(label) } }
+                Button("Delete label", role: .destructive) { if let label = deleting { delete(label) } }
             } message: {
                 Text("It comes off every conversation that has it.")
             }
@@ -170,7 +170,7 @@ struct SettingsView: View {
                 .autocorrectionDisabled()
                 .submitLabel(.done)
                 .onSubmit(saveResendKey)
-            Button(isSavingKey ? "Saving" : "Save Key", action: saveResendKey)
+            Button(isSavingKey ? "Saving" : "Save key", action: saveResendKey)
                 .disabled(resendKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSavingKey)
         } header: {
             Text("Your domains")
@@ -197,7 +197,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            Button("Add Domain", systemImage: "plus") {
+            Button("Add domain", systemImage: "plus") {
                 newDomain = ""
                 isAddingDomain = true
             }
@@ -214,7 +214,7 @@ struct SettingsView: View {
             LabeledContent("Server") {
                 Text(server.host).font(.phoneMono(14))
             }
-            Button("Disconnect Server", role: .destructive) { isConfirmingDisconnect = true }
+            Button("Disconnect server", role: .destructive) { isConfirmingDisconnect = true }
                 .foregroundStyle(Color.danger)
         } footer: {
             version
@@ -224,6 +224,10 @@ struct SettingsView: View {
 
     private var version: some View {
         Text("bMail \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+            .font(.phone(13, relativeTo: .footnote))
+            .foregroundStyle(Color.textMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
     }
 
     @ViewBuilder private var addAccount: some View {
@@ -232,7 +236,7 @@ struct SettingsView: View {
                 Button("Gmail", systemImage: "envelope", action: connectGmail)
             }
             if model.session.server == nil {
-                Button("Address on Your Own Domain", systemImage: "at") { isSettingUpServer = true }
+                Button("Address on your own domain", systemImage: "at") { isSettingUpServer = true }
             }
             ForEach(domains.filter { $0.status == .verified }) { domain in
                 Button("Address on \(domain.name)", systemImage: "at") {
@@ -241,7 +245,7 @@ struct SettingsView: View {
                 }
             }
         } label: {
-            Label(isConnecting ? "Connecting Gmail" : "Add Account", systemImage: "plus")
+            Label(isConnecting ? "Connecting Gmail" : "Add account", systemImage: "plus")
         }
         .disabled(isConnecting)
     }
@@ -373,7 +377,7 @@ private struct AccountSettings: View {
             }
             .listRowBackground(Color.raised)
             Section {
-                Button(account.kind == .domain ? "Delete Address" : "Disconnect", role: .destructive) { isConfirmingRemoval = true }
+                Button(account.kind == .domain ? "Delete address" : "Disconnect", role: .destructive) { isConfirmingRemoval = true }
                     .foregroundStyle(Color.danger)
             }
             .listRowBackground(Color.raised)
