@@ -27,15 +27,18 @@ private struct ConversationList: View {
     @State private var picked: Set<Conversation.ID> = []
     /// Whether the large title has scrolled away, which is when the bar shows the small one.
     @State private var isTitleCollapsed = false
+    @State private var showsFetching = false
 
     var body: some View {
         @Bindable var model = model
         let request = request
         let labelNames = query.labelNames
         let tags = model.accountFilter == nil && query.accounts.count > 1 ? query.tags : [:]
+        let isFetching = model.session.syncStatus.isCatchingUp && model.mailbox == .tab(.inbox) && model.searchResults == nil
         // Selection only while selecting: with it bound, a tap on a row picks it instead of opening it.
         List(selection: editMode.isEditing ? $picked : nil) {
             titleRow
+            if showsFetching, !query.conversations.isEmpty { fetchingRow }
             ForEach(query.conversations) { conversation in
                 NavigationLink(value: conversation.id) {
                     ConversationRow(
@@ -65,9 +68,14 @@ private struct ConversationList: View {
         }
         .overlay {
             if query.conversations.isEmpty, !query.isLoading {
-                EmptyList(message: emptyMessage)
+                if showsFetching {
+                    FetchingMail()
+                } else if !isFetching {
+                    EmptyList(message: emptyMessage)
+                }
             }
         }
+        .loaderVisibility(while: isFetching, isShown: $showsFetching)
         .navigationTitle(editMode.isEditing ? pickedTitle : model.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
@@ -96,6 +104,21 @@ private struct ConversationList: View {
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
         .listRowBackground(Color.canvas)
+        .selectionDisabled()
+    }
+
+    /// The first row while new mail is on its way.
+    private var fetchingRow: some View {
+        VStack(spacing: 6) {
+            EnvelopeLoader(size: 56)
+            Text("Fetching new mail").font(.phone(15, .medium)).foregroundStyle(Color.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 12)
+        .padding(.bottom, 14)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.canvas)
+        .listRowSeparatorTint(Color.line)
         .selectionDisabled()
     }
 
@@ -431,6 +454,16 @@ private struct AccountMenu: View {
                 }
             }
             .accessibilityLabel(accounts.first { $0.id == model.accountFilter }?.address ?? "All accounts")
+        }
+    }
+}
+
+/// An empty inbox while the first sync brings mail in.
+private struct FetchingMail: View {
+    var body: some View {
+        VStack(spacing: 12) {
+            EnvelopeLoader(size: 150)
+            Text("Fetching your mail").font(.phone(16)).foregroundStyle(Color.textMuted)
         }
     }
 }
