@@ -189,15 +189,42 @@ private struct AccountMenu: View {
     @State private var isOpen = false
 
     var body: some View {
+        let update = self.update
         Button { isOpen.toggle() } label: {
             Avatar(accounts.first?.displayName ?? "", size: 26)
+                .overlay(alignment: .topTrailing) {
+                    if update != nil {
+                        UpdateDot(size: 8)
+                            .padding(2)
+                            .background(Color.chrome, in: .circle)
+                            .offset(x: 3, y: -3)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .fixedSize()
         .dropdown(isPresented: $isOpen, alignment: .trailing) {
+            if let update {
+                Button {
+                    isOpen = false
+                    model.updater.restart()
+                } label: {
+                    HStack(spacing: 8) {
+                        UpdateDot(size: 6)
+                        Text("Restart to update to \(update)")
+                    }
+                }
+                .buttonStyle(.dropdownItem)
+                Hairline().padding(.vertical, 4)
+            }
             item("Settings", key: "⌘,") { model.openSettings() }
             item("Keyboard shortcuts", key: "?") { model.perform(.shortcuts) }
         }
+    }
+
+    /// The version waiting for a restart. Hidden while you write: restarting would throw the message away.
+    private var update: String? {
+        model.composer == nil ? model.updater.readyVersion : nil
     }
 
     private func item(_ title: String, key: String?, action: @escaping () -> Void) -> some View {
@@ -212,5 +239,14 @@ private struct AccountMenu: View {
             }
         }
         .buttonStyle(.dropdownItem)
+    }
+}
+
+/// Blue, like an unread dot: a new version is ready.
+private struct UpdateDot: View {
+    let size: CGFloat
+
+    var body: some View {
+        Circle().fill(Color.link).frame(width: size, height: size)
     }
 }

@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "Assist", targets: ["Assist"]),
         .library(name: "MailUI", targets: ["MailUI"]),
         .library(name: "Agents", targets: ["Agents"]),
+        .library(name: "Updates", targets: ["Updates"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.11.0"),
@@ -22,6 +23,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.0"),
         .package(url: "https://github.com/apple/swift-http-types", from: "1.4.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk", from: "0.12.1"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.1"),
     ],
     targets: [
         .target(
@@ -74,6 +76,13 @@ let package = Package(
                 "MailUI",
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "SQLiteData", package: "sqlite-data"),
+            ]
+        ),
+        .target(
+            name: "Updates",
+            dependencies: [
+                "DesignSystem",
+                .product(name: "Sparkle", package: "Sparkle"),
             ]
         ),
         .testTarget(name: "MailCoreTests", dependencies: ["MailCore"]),
