@@ -74,12 +74,15 @@ jobs:
                   ditto "$RUNNER_TEMP/bMail.xcarchive/Products/Applications/bMail.app" "$app"
                   entitlements="$RUNNER_TEMP/Mail.entitlements"
                   cp App/Resources/Mail.entitlements "$entitlements"
+                  # Xcode fills in build settings in entitlements, codesign doesn't.
+                  bundle_id="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$app/Contents/Info.plist")"
+                  sed -i '' "s/[$](PRODUCT_BUNDLE_IDENTIFIER)/$bundle_id/" "$entitlements"
                   # iCloud Keychain needs keychain-access-groups, and macOS only lets an app with that entitlement launch
                   # when an embedded profile grants it. Without the profile secret, accounts stay on this Mac.
                   if [ -n "$PROVISIONING_PROFILE" ]; then
                       echo "$PROVISIONING_PROFILE" | base64 --decode > "$app/Contents/embedded.provisionprofile"
                       sed -i '' "s/[$](AppIdentifierPrefix)/$TEAM_ID./" "$entitlements"
-                      /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM_ID.be.baree.mail" "$entitlements"
+                      /usr/libexec/PlistBuddy -c "Add :com.apple.application-identifier string $TEAM_ID.$bundle_id" "$entitlements"
                       /usr/libexec/PlistBuddy -c "Add :com.apple.developer.team-identifier string $TEAM_ID" "$entitlements"
                   else
                       plutil -remove keychain-access-groups "$entitlements"
@@ -122,6 +125,21 @@ jobs:
               run: |
                   signature="$(echo "$SPARKLE_PRIVATE_KEY" | "$RUNNER_TEMP/packages/artifacts/sparkle/Sparkle/bin/sign_update" --ed-key-file - "$DMG")"
                   info="$RUNNER_TEMP/bMail.xcarchive/Products/Applications/bMail.app/Contents/Info.plist"
+                  # Any key signs, so check the signature against the app's own public key before anything ships.
+                  cat > "$RUNNER_TEMP/verify.swift" <<'EOF'
+                  import CryptoKit
+                  import Foundation
+
+                  let arguments = CommandLine.arguments
+                  let key = try Curve25519.Signing.PublicKey(rawRepresentation: Data(base64Encoded: arguments[1])!)
+                  let signature = Data(base64Encoded: arguments[2])!
+                  guard key.isValidSignature(signature, for: try Data(contentsOf: URL(fileURLWithPath: arguments[3]))) else {
+                      print("::error::SPARKLE_PRIVATE_KEY doesn't match SUPublicEDKey. Installed copies would refuse this update.")
+                      exit(1)
+                  }
+                  EOF
+                  swift "$RUNNER_TEMP/verify.swift" "$(/usr/libexec/PlistBuddy -c "Print :SUPublicEDKey" "$info")" \
+                      "$(echo "$signature" | sed -E 's/.*edSignature="([^"]*)".*/\1/')" "$DMG"
                   cat > "$RUNNER_TEMP/appcast.xml" <<EOF
                   <?xml version="1.0" encoding="utf-8"?>
                   <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
