@@ -14,14 +14,14 @@
         "db:studio": "drizzle-kit studio"
     },
     "dependencies": {
-        "@neondatabase/serverless": "^1.1.0",
+        "@neondatabase/serverless": "^1.2.0",
         "@repo/contracts": "workspace:*",
         "drizzle-orm": "catalog:"
     },
     "devDependencies": {
         "@repo/oxlint-config": "workspace:*",
         "@repo/typescript-config": "workspace:*",
-        "@types/node": "^26.2.0",
+        "@types/node": "^26.6.5",
         "drizzle-kit": "^0.31.11",
         "typescript": "catalog:"
     }
