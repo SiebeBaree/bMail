@@ -13,7 +13,7 @@ struct PhoneFieldStyle: TextFieldStyle {
     }
 }
 
-/// The full-width buttons on the welcome screen and in server setup.
+/// The full-width buttons in setup.
 struct PhoneButtonStyle: ButtonStyle {
     enum Kind { case primary, secondary }
 

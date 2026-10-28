@@ -140,7 +140,7 @@ struct DomainSettings: View {
 }
 
 /// One record: what kind, where it goes and what it says, with whether DNS has it yet.
-private struct RecordRow: View {
+struct RecordRow: View {
     let record: DNSRecord
     let copy: () -> Void
 

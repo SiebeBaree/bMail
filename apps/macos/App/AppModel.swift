@@ -18,6 +18,7 @@ private let commandLog = Logger(subsystem: "be.baree.mail", category: "Commands"
 @Observable
 final class AppModel {
     let session = MailSession(google: BuildSettings.google)
+    let onboarding: Onboarding
     let agents: AgentServer
     let updater: Updater
     @ObservationIgnored private let notifications = AgentNotifications()
@@ -76,9 +77,12 @@ final class AppModel {
     /// Conversation ids matching `searchText`, best first. Nil when not searching.
     var searchResults: [Conversation.ID]?
     @ObservationIgnored var openSettings: () -> Void = {}
+    /// The keys step, while it's on screen. During setup every command goes here instead, so practice never touches mail.
+    @ObservationIgnored var practice: (@MainActor (Command) -> Bool)?
 
     init() {
         Typography.register()
+        onboarding = Onboarding(isReturning: session.hasSyncedBefore, hasMail: session.phase == .ready, offersAgents: true)
         agents = AgentServer(session: session)
         updater = Updater(toasts: session.toasts)
         updater.start()
@@ -147,6 +151,7 @@ final class AppModel {
     @discardableResult
     func perform(_ command: Command) -> Bool {
         commandLog.debug("perform \(command.title, privacy: .public)")
+        guard onboarding.isFinished else { return practice?(command) ?? false }
         guard session.phase == .ready else { return false }
         if command.needsConversation, selection == nil, checked.isEmpty { return false }
 

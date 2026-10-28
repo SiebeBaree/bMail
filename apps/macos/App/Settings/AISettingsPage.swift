@@ -48,7 +48,7 @@ struct AISettingsPage: View {
 // MARK: - Layout
 
 /// A muted label over a rounded group of rows, split by hairlines.
-private struct SettingsGroup<Rows: View>: View {
+struct SettingsGroup<Rows: View>: View {
     let label: String
     @ViewBuilder let rows: () -> Rows
 
@@ -70,7 +70,7 @@ private struct SettingsGroup<Rows: View>: View {
 
 /// One row: what it is on the left, with a short note under it, and its control on the right. The hairline on top is
 /// hidden under the group's border on the first row.
-private struct GroupRow<Control: View>: View {
+struct GroupRow<Control: View>: View {
     let title: String
     let note: Text?
     @ViewBuilder let control: () -> Control
@@ -106,7 +106,7 @@ private struct GroupRow<Control: View>: View {
 // MARK: - Provider
 
 /// The provider, your key for it and a check that both work.
-private struct ProviderGroup: View {
+struct ProviderGroup: View {
     @Environment(AppModel.self) private var model
     @State private var isOpen = false
     @State private var status: Status?

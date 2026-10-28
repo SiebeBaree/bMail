@@ -13,12 +13,13 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         ZStack {
-            switch model.session.phase {
-            case .welcome: WelcomeView().transition(.opacity)
-            case .ready: InboxScreen().transition(.opacity)
+            if model.onboarding.isFinished {
+                InboxScreen().transition(.opacity)
+            } else {
+                OnboardingView().transition(.opacity)
             }
         }
-        // Here rather than on the inbox, so connecting a server can ask from the welcome screen too.
+        // Here rather than on the inbox, so connecting a server can ask during setup too.
         .sheet(item: $model.sheet, onDismiss: model.sheetDismissed) { sheet in
             switch sheet {
             case let .composer(composer): ComposerView(model: composer)
@@ -28,7 +29,8 @@ struct RootView: View {
             }
         }
         .onOpenURL { model.handle($0) }
-        .animation(.easeInOut(duration: 0.3), value: model.session.phase)
+        .onChange(of: model.session.phase, initial: true) { _, phase in if phase == .welcome { model.onboarding.restart() } }
+        .animation(.easeInOut(duration: 0.3), value: model.onboarding.isFinished)
         .font(.phone(16))
         .foregroundStyle(Color.textPrimary)
         // Monochrome like the rest of Vercel's look: blue is kept for what's new, links and sending.

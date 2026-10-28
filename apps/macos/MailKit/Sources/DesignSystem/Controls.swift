@@ -116,6 +116,27 @@ extension TextFieldStyle where Self == FieldStyle {
     public static var field: FieldStyle { FieldStyle() }
 }
 
+/// Where you are in setup: a short bar per step, lit up to the current one.
+public struct StepBars: View {
+    private let count: Int
+    private let current: Int
+
+    public init(count: Int, current: Int) {
+        self.count = count
+        self.current = current
+    }
+
+    public var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<count, id: \.self) { index in
+                Capsule().fill(index <= current ? Color.textPrimary : Color.lineStrong).frame(width: 16, height: 3)
+            }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Step \(current + 1) of \(count)")
+    }
+}
+
 /// Initials in a circle. No photos and no generated gradients: a list of faces is noise.
 public struct Avatar: View {
     private let name: String

@@ -225,7 +225,7 @@ private struct DomainRow: View {
     }
 }
 
-private struct RecordTable: View {
+struct RecordTable: View {
     let records: [DNSRecord]
 
     var body: some View {
@@ -267,7 +267,7 @@ private struct RecordTable: View {
 }
 
 /// Your server sends and receives through your Resend account, so it asks for a key once, before your first domain.
-private struct ResendKeyStep: View {
+struct ResendKeyStep: View {
     let saved: () -> Void
     @Environment(AppModel.self) private var model
     @State private var key = ""

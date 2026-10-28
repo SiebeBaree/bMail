@@ -10,16 +10,26 @@ struct ServerChoice: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
     @State private var isTypingAddress = false
+    @State private var isDeploying = false
     @State private var address = ""
     @State private var error: String?
     @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button { openURL(ServerSetup.deployURL) } label: {
-                Text("Set up on Vercel").frame(maxWidth: .infinity)
+            Button {
+                isDeploying = true
+                openURL(ServerSetup.deployURL)
+            } label: {
+                Text(isDeploying ? "Waiting for Vercel" : "Set up on Vercel").frame(maxWidth: .infinity)
             }
             .buttonStyle(.primary)
+            if isDeploying {
+                Text("Finish the deploy in your browser. bMail picks up the server when it's done.")
+                    .font(.geist(12))
+                    .foregroundStyle(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if isTypingAddress {
                 HStack(spacing: 8) {
                     TextField("mail-api.example.com", text: $address)
@@ -142,8 +152,8 @@ struct ConnectServerSheet: View {
             do {
                 try await model.session.claimServer(at: url, code: code)
                 model.connectingServer = nil
-                // You came for your own domain, and that starts in Settings.
-                if !model.session.accounts.contains(where: { $0.kind == .domain }) { model.openSettings() }
+                // You came for your own domain, which setup carries on with. After setup it's in Settings.
+                if model.onboarding.isFinished, !model.session.accounts.contains(where: { $0.kind == .domain }) { model.openSettings() }
             } catch {
                 // Someone claimed it since the check, which the owned message already explains.
                 if ownership == .fresh, (error as? ProviderError)?.kind == .rejected {

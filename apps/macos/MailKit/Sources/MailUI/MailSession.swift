@@ -571,6 +571,11 @@ public final class MailSession {
         (try? store.database.read { db in try Account.order(by: \.position).fetchAll(db) }) ?? []
     }
 
+    /// Whether this device has synced before, which tells someone updating from someone opening bMail for the first time.
+    public var hasSyncedBefore: Bool {
+        ((try? store.database.read { db in try SyncCursor.all.fetchCount(db) }) ?? 0) > 0
+    }
+
     /// Conversation ids matching `query`, best first. Nil when there's nothing to search for.
     public func search(_ query: String) -> [Conversation.ID]? {
         let query = query.trimmingCharacters(in: .whitespaces)

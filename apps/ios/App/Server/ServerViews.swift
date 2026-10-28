@@ -10,14 +10,24 @@ struct ServerChoice: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openURL) private var openURL
     @State private var isTypingAddress = false
+    @State private var isDeploying = false
     @State private var address = ""
     @State private var error: String?
     @FocusState private var isFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Button("Set up on Vercel") { openURL(ServerSetup.deployURL) }
-                .buttonStyle(PhoneButtonStyle(.primary))
+            Button(isDeploying ? "Waiting for Vercel" : "Set up on Vercel") {
+                isDeploying = true
+                openURL(ServerSetup.deployURL)
+            }
+            .buttonStyle(PhoneButtonStyle(.primary))
+            if isDeploying {
+                Text("Finish the deploy in Safari. bMail picks up the server when it's done.")
+                    .font(.phone(14))
+                    .foregroundStyle(Color.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if isTypingAddress {
                 TextField("mail-api.example.com", text: $address)
                     .textFieldStyle(PhoneFieldStyle())
@@ -134,8 +144,9 @@ struct ConnectServerSheet: View {
             do {
                 try await model.session.claimServer(at: url, code: code)
                 Haptics.success()
-                // You came for your own domain, and that starts in Settings.
-                model.sheet = model.session.accounts.contains(where: { $0.kind == .domain }) ? nil : .settings
+                // You came for your own domain, which setup carries on with. After setup it's in Settings.
+                let needsDomain = !model.session.accounts.contains(where: { $0.kind == .domain })
+                model.sheet = model.onboarding.isFinished && needsDomain ? .settings : nil
             } catch {
                 Haptics.failure()
                 // Someone claimed it since the check, which the owned message already explains.
