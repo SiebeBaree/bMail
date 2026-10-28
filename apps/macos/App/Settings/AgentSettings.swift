@@ -30,7 +30,7 @@ struct AgentsSection: View {
     }
 }
 
-private struct AgentAccessRow: View {
+struct AgentAccessRow: View {
     let account: Account
     @AppStorage private var access: AgentAccess
     @State private var isOpen = false
@@ -86,7 +86,7 @@ private struct AgentAccessRow: View {
 }
 
 /// The line to give an agent, with the token in it. Shown with the token cut short; Copy copies all of it.
-private struct AgentConnection: View {
+struct AgentConnection: View {
     let token: String
     let newToken: () -> Void
     @State private var client = Client.claudeCode

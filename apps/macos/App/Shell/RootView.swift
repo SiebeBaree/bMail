@@ -10,10 +10,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            switch model.session.phase {
-            case .welcome: WelcomeView()
-            case .ready: MainView()
-            }
+            if model.onboarding.isFinished { MainView() } else { OnboardingView() }
             if let url = model.connectingServer { ConnectServerSheet(url: url) }
             if model.isPaletteOpen { CommandPalette() }
             if model.isShortcutsOpen { ShortcutSheet() }
@@ -26,6 +23,7 @@ struct RootView: View {
         .tint(.accent)
         .onAppear { model.openSettings = { openSettings() } }
         .onOpenURL { model.handle($0) }
+        .onChange(of: model.session.phase, initial: true) { _, phase in if phase == .welcome { model.onboarding.restart() } }
         .onChange(of: scenePhase) { _, phase in if phase == .active { model.session.syncNow() } }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didChangeOcclusionStateNotification)) { _ in
             model.session.setVisible(NSApp.occlusionState.contains(.visible))

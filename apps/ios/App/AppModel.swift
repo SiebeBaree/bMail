@@ -38,6 +38,7 @@ final class AppModel {
     }
 
     let session = MailSession(google: BuildSettings.google)
+    let onboarding: Onboarding
 
     var mailbox: Mailbox = .tab(.inbox)
     /// Nil shows every account together.
@@ -60,6 +61,7 @@ final class AppModel {
     init() {
         Typography.register()
         Theme.apply()
+        onboarding = Onboarding(isReturning: session.hasSyncedBefore, hasMail: session.phase == .ready, offersAgents: false)
         session.openLink = { [weak self] url in self?.open(url) }
     }
 

@@ -50,6 +50,7 @@ Run the Mac app against a local api: start the api (`PORT=4317 PUBLIC_URL=http:/
 
 ## Things you need to know
 
+- The first launch on a device plays the site's intro (`Intro` in DesignSystem, landing on the `Wordmark`) and then `Onboarding` (MailUI) walks through setup: your mail, the server steps for your own domain, AI, agents on the Mac and the keys. The steps follow from what exists, so only `intro.played` and `onboarding.finished` are stored and `--args -intro.played NO -onboarding.finished NO` plays it all again. A device that synced before never sees it. During setup the Mac sends every command to the keys step, so practice never touches mail.
 - Views read with `@FetchAll`/`@Fetch` and never write. Writes go through `MailStore`, which keeps derived list columns, the search index and pending mutations consistent; a sync that races your own change replays the pending mutations on top.
 - Raw GRDB SQL binds a `UUID` as a blob, but the tables store ids as lowercase text (StructuredQueries' format). Bind `uuidString.lowercased()` in raw SQL, or use the query builder.
 - Gmail ids become our ids through `UUID(stableFrom:)`, so a resync updates rows instead of duplicating them.
